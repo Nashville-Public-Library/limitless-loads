@@ -1,0 +1,707 @@
+#!/usr/bin/expect
+# STUDENTS-ELEMENTARY.exp
+# James Staub
+# Nashville Public Library
+# Limitless Libraries elementary student patron load
+# Millennium 2014 2.0.0_15
+#
+# to do:
+#	add auto|manual arg
+#	add logic to page forward when looking for reviewFile
+#	add check to review file to ensure it is big enough
+#
+# 20151216 : fixes
+# 20151210 : improvements
+#	sync with EDUCATORS.exp improvements
+#	attempt to have more flexible parsing of input column order
+# 20151022 : cleanup
+#	add logFile
+#	add logic to determine whether RSA key is saved
+#	add sleep after writing Millennium output file
+#	add HOLD LIBR and EXP DATE to Millennium export
+#	add logic to compare school vs library on HOLD LIBR and EXP DATE
+# 20150820 : change to accommodate 2015-16 school year
+# 20141008 : not sure what changed...
+# 20140911 : beta derived from EDUCATORS.exp : this script :
+# 	unzip school file
+# 	log into INNOPAC, creates a list of P TYPE 33 patrons, exports the list
+# 	scp library data from Millennium server
+# 	compare schools and library files to determine which schools records to add
+# 	call php script to compose the patron pseudo-MARC file
+# 	scp MARC file to Millennium server
+# 	log into INNOPAC, load patron records, create new list of P TYPE 33 patrons
+
+#exp_internal 1 ; # verbose debugging to stdout
+#log_user 0 ; # do NOT send screens to stdout
+
+# determine whether "m" or "manual" was included as an argument
+if { [lindex $argv 0] eq "m" || [lindex $argv 0] eq "manual" } then  {
+	set manual true
+} else {
+	set manual false
+}
+if {$manual eq false} {
+	set libraryAddsFileName "STUDENTS-ELEMENTARY-ADD-[clock format [clock seconds] -format %Y%m%d]"
+} else {
+	set libraryAddsFileName "STUDENTS-ELEMENTARY-MANUAL-ADD-[clock format [clock seconds] -format %Y%m%d]"
+}
+# READ CONFIG.PWD.INI
+# VARIABLES SET IN CONF.PWD.INI
+set confpwd "/home/limitless/conf.pwd.ini"
+if {[file exists $confpwd] != 1} {
+	puts "config.pwd.ini not found at $confpwd"
+	exit
+}
+set fd [open $confpwd r]
+while {![eof $fd]} {
+	set line [string trim [gets $fd] " "]
+	if {$line == ""} continue
+	switch -regexp -nocase -- $line {
+		"^\\[Student Elementary Patron Load\\]" {
+			set section true
+		}
+		"^\\[" {
+			set section false
+		}
+		"^#" {
+			continue
+		}
+		"^.+?" {
+			if {$section == true} {
+				set pair [split $line =]
+				set variable [string trim [lindex $pair 0]]
+				set value [string trim [lindex $pair 1]]
+				set $variable $value
+				#puts "$variable  = $value"
+			}
+		}
+		default {}
+	}
+}
+# LOG FILE : write to it with
+# puts $logFile "[clock format [clock seconds] -format "%y%m%d %H:%M:%S"] >> log entry"
+set logFilePath "~/data/$name.log"
+if { [catch {open $logFilePath "a+"} logFile ] } {
+	puts "Error could not open $logFilePath"
+}
+set logTimeStart [clock seconds]
+puts $logFile "[clock format [clock seconds] -format "%y%m%d %H:%M:%S"] >> Start $name"
+
+# block for commenting out lots of lines
+# N.B.: we cannot place commented right-braces below in the code
+# they will be interpreted as the closing brace of this if 0 conditional
+#if 0 {
+
+# SCHOOLS: RETRIEVE DATA
+# SCHOOLS deliver data to /home/limitless/data
+if {$manual eq false} {
+	# SCHOOLS: UNZIP
+	spawn unzip -ouB "$localPath$schoolsFileZip" -d "$localPath"
+	expect "password:"
+	send "$schoolsPassword\r"
+	wait
+	close
+	# IF we need to use 7zip to unpack the data
+	#spawn 7za e -y -o$localPath $localPath$schoolsFileZip
+	#expect "Enter password (will not be echoed) :"
+	#send "$unzipPassword\r"
+	#expect "Everything is Ok"
+	#wait
+	#close
+	file rename -force -- $localPath$schoolsFile $localPath$schoolsFileName
+	file delete -force -- [file dirname $localPath$schoolsFile]
+}
+
+# insert right brace here for closing if 0 comment block
+
+# CONNECT TO INNOPAC
+spawn ssh $INNOPACuser@$host
+expect {
+	# if RSA key for host is not yet set
+	"Are you sure you want to continue connecting (yes/no)?" {
+		send "yes\r"
+		#expect "login as:"
+		send "$INNOPACuser\r"
+		expect "Password:"
+		send "$INNOPACuserPassword\r"
+	}
+	"Password:" {
+		send "$INNOPACuserPassword\r"
+	}
+}
+expect "What kind of Terminal are you using?"
+send "v"
+expect "Please confirm: are you using a VT100 or compatible terminal?"
+send "y"
+# CREATE LIST
+expect "M > MANAGEMENT information"
+send "M"
+expect "L > Create LISTS of records"
+send "L"
+expect "Please key your initials :"
+send "$INNOPACinitials\r"
+expect "Please key your password :"
+send "$INNOPACinitialsPassword\r"
+sleep 1
+# TO DO: FORWARD TO REVIEW FILE PAGE
+expect "$reviewFile > $name"
+send $reviewFile
+expect "N > NEW BOOLEAN search, delete the review file"
+send "N"
+expect "Are you sure you want to delete the current review file?"
+send "Y"
+expect "P > PATRON list"
+send "P"
+expect "05 P TYPE:"
+send "05"
+expect "Enter boolean condition (=, ~, >, <, G, L, W, N)"
+send "="
+expect "P TYPE ="
+send "033"
+expect "Enter action ( A for AND, O for OR, S to START search )"
+send "S"
+expect "What name would you like to give this file of records?"
+send "$name\r"
+set timeout -1
+expect "BOOLEAN SEARCH COMPLETE"
+set timeout $wait
+send " "
+# CREATE EXPORT FILE
+expect "U > Output USER-selected format"
+send "U"
+expect "C > CREATE a new file for output"
+send "C"
+expect "Output Item #1 >"
+send "b" ; # patron barcode
+expect "Output Item #2 >"
+send "n" ; # patron NAME
+expect "Output Item #3 >"
+send "10" ; # patron HOLD LIBR
+expect "Output Item #4 >"
+send "01" ; # patron EXP DATE
+expect "Output Item #5 >"
+send "x" ; # patron NOTE
+expect "Output Item #6 >"
+send "g" ; # patron GUARDIAN
+expect "Output Item #7 >"
+send "z" ; # patron EMAIL
+expect "Output Item #8 >"
+send "\r"
+expect "1 > Field Delimiter"
+send "1"
+expect "1 > Control character"
+send "1"
+expect "Decimal value"
+send "009" ; # tab
+expect "1 > Field Delimiter......................................................... 9"
+expect "2 > Text Qualifier"
+send "2"
+expect "3 > None"
+send "3"
+expect "2 > Text Qualifier....................................................... none"
+expect "3 > Repeated Field Delimiter"
+send "3"
+expect "2 > ASCII character"
+send "2"
+expect "ASCII character"
+send "|"
+expect "C > CREATE a new file for output"
+send "C"
+expect "File name:"
+send "$name\r"
+expect "already exists. Overwrite it?"
+send "y"
+expect "Output the file now?"
+send "n"
+close
+puts "Sleeping for 10 seconds while Millennium output file writes"
+# file needs time to write before grabbing it
+sleep 10
+# RETRIEVE THE FILE FROM INNOPAC
+spawn scp $solarisUser@$host:$solarisPath/$name.out $localPath$name.out
+set timeout -1
+expect "Password"
+send "$solarisUserPassword\r"
+expect "100%"
+sleep 1
+close
+set timeout $wait
+#puts $logFile "[clock format [clock seconds] -format "%y%m%d %H:%M:%S"] >> Retrieved file from INNOPAC"
+
+# insert right brace here for closing if 0 comment block
+
+
+# COMPARE LIBRARY AND SCHOOLS DATA
+set schoolsFile [open $localPath$schoolsFileName]
+set data [read $schoolsFile]
+close $schoolsFile
+set schoolsRecords [split $data \n]
+#puts "\n\n\nSCHOOLS RECORDS\n\n\n"
+#puts $schoolsRecords
+# READ SCHOOLS RECORDS COLUMN HEADERS
+# 20151201 headers were
+#SCHOOL_CODE     TIER    SCHOOL_NAME     LAST_NAME       FIRST_NAME      MIDDLE_NAME     DATE_OF_BIRTH   ID_NUMBER       GRADE   HOMEROOM_NUMBER PARENT_GUARD_LASTNAME   PARENT_GUARD_FIRSTNAME  STREET_NUMBER   STREET_NAME     ADDRESS_TYPE    ADDRESS_DIRECTION    APARTMENT_NUMBER        CITY    STATE   ZIP     HomePhone       Email   Permission_NPL  ENROLLMENT_START_DATE
+set schoolsColumns [split [lindex $schoolsRecords 0] "\t"]
+set schoolsSCHOOL_CODE [lsearch -exact $schoolsColumns "SCHOOL_CODE"]
+set schoolsSCHOOL_NAME [lsearch -exact $schoolsColumns "SCHOOL_NAME"]
+set schoolsLAST_NAME [lsearch -exact $schoolsColumns "LAST_NAME"]
+set schoolsFIRST_NAME [lsearch -exact $schoolsColumns "FIRST_NAME"]
+set schoolsMIDDLE_NAME [lsearch -exact $schoolsColumns "MIDDLE_NAME"]
+set schoolsDATE_OF_BIRTH [lsearch -exact $schoolsColumns "DATE_OF_BIRTH"]
+set schoolsID_NUMBER [lsearch -exact $schoolsColumns "ID_NUMBER"]
+set schoolsGRADE [lsearch -exact $schoolsColumns "GRADE"]
+set schoolsHOMEROOM_NUMBER [lsearch -exact $schoolsColumns "HOMEROOM_NUMBER"]
+set schoolsPARENT_GUARD_LASTNAME [lsearch -exact $schoolsColumns "PARENT_GUARD_LASTNAME"]
+set schoolsPARENT_GUARD_FIRSTNAME [lsearch -exact $schoolsColumns "PARENT_GUARD_FIRSTNAME"]
+set schoolsSTREET_NUMBER [lsearch -exact $schoolsColumns "STREET_NUMBER"]
+set schoolsSTREET_NAME [lsearch -exact $schoolsColumns "STREET_NAME"]
+set schoolsADDRESS_TYPE [lsearch -exact $schoolsColumns "ADDRESS_TYPE"]
+set schoolsADDRESS_DIRECTION [lsearch -exact $schoolsColumns "ADDRESS_DIRECTION"]
+set schoolsAPARTMENT_NUMBER [lsearch -exact $schoolsColumns "APARTMENT_NUMBER"]
+set schoolsCITY [lsearch -exact $schoolsColumns "CITY"]
+set schoolsSTATE [lsearch -exact $schoolsColumns "STATE"]
+set schoolsZIP [lsearch -exact $schoolsColumns "ZIP"]
+set schoolsHomePhone [lsearch -exact $schoolsColumns "HomePhone"]
+set schoolsEmail [lsearch -exact $schoolsColumns "Email"]
+set reSchoolsSCHOOL_CODE "^(?:\[^\t]*\t)\{$schoolsSCHOOL_CODE}(\[^\t]*)\t"
+set reSchoolsID_NUMBER "^(?:\[^\t]*\t)\{$schoolsID_NUMBER}(\[^\t]*)\t"
+
+foreach line $schoolsRecords {
+	# eliminate known trouble accounts
+	regexp -- $reSchoolsID_NUMBER $line -> schoolsID_NUMBERValue
+	set isTroubleAccount [lsearch $troubleAccounts [string trim $schoolsID_NUMBERValue]]
+	if {
+		$isTroubleAccount > -1
+	} then {
+		continue
+	}
+	# accept only accounts at valid schools
+	regexp -- $reSchoolsSCHOOL_CODE $line -> schoolsSCHOOL_CODEValue
+	set isValidSchool [lsearch $validSchools [string trim $schoolsSCHOOL_CODEValue]]
+	if {
+		$isValidSchool == -1
+	} then {
+		#puts "skip $schoolsID_NUMBERValue invalid school $schoolsSCHOOL_CODEValue"
+		continue
+	} else {
+		set line "[string trim $schoolsID_NUMBERValue]\t[string trim $schoolsSCHOOL_CODEValue]\t$expDate"
+		lappend schoolsIds [list [split $line "\t"]]
+	}
+}
+
+set schoolsIds [lsort -dictionary -index 0 $schoolsIds]
+#puts "\n\n\nSCHOOLS IDS\n"
+#puts [lindex $schoolsIds 2500] ;
+#puts [lindex $schoolsIds end] ; # last ID
+#puts [llength $schoolsIds]
+puts $logFile "[clock format [clock seconds] -format "%y%m%d %H:%M:%S"] >> SCHOOLS IDS: [llength $schoolsIds]"
+set libraryFile [open $localPath$libraryFileName]
+set data [read $libraryFile]
+close $libraryFile
+set libraryRecords [split $data \n]
+set libraryIds {}
+set libraryRejects {}
+# READ LIBRARY RECORDS COLUMN HEADERS
+set libraryColumns [split [lindex $libraryRecords 0] "\t"]
+set libraryHOLD_LIBR [lsearch -exact $libraryColumns "HOLD LIBR"]
+set libraryCARD [lsearch -exact $libraryColumns "CARD #"]
+set libraryEXP_DATE [lsearch -exact $libraryColumns "EXP DATE"]
+set libraryPATRN_NAME [lsearch -exact $libraryColumns "PATRN NAME"]
+set libraryNOTE_PATRON [lsearch -exact $libraryColumns "NOTE(PATRON)"]
+set libraryG_NAME [lsearch -exact $libraryColumns "G. NAME"]
+set libraryEMAIL_ADDR [lsearch -exact $libraryColumns "EMAIL ADDR"]
+set reLibraryHOLD_LIBR "^(?:\[^\t]*\t)\{$libraryHOLD_LIBR}(?:\[a-z]{2})(\[^\t]\{3})\t"
+set reLibraryCARD "^(?:\[^\t]*\t)\{$libraryCARD}(?:\[^\t]+\\|)*(190\\d\{6})(?:\\|\[^\t]*)*\t"
+set reLibraryEXP_DATE "^(?:\[^\t]*\t)\{$libraryEXP_DATE}(\[-0-9]\{10})\t"
+
+foreach line $libraryRecords {
+	set libraryHOLD_LIBRValue ""
+	set libraryCARDValue ""
+	set libraryEXP_DATEValue ""
+	if [
+		regexp -- $reLibraryHOLD_LIBR [string trim $line] -> libraryHOLD_LIBRValue &&
+		regexp -- $reLibraryCARD [string trim $line] -> libraryCARDValue &&
+		regexp -- $reLibraryEXP_DATE [string trim $line] -> libraryEXP_DATEValue
+	] then {
+		set line "[string trim $libraryCARDValue]\t[string trim $libraryHOLD_LIBRValue]\t$libraryEXP_DATEValue"
+		lappend libraryIds [list [split $line "\t"]]
+	} else {
+		lappend libraryRejects $line
+	}
+}
+set libraryIds [lsort -dictionary -index {0 0} $libraryIds]
+#puts "\n\n\nLIBRARY IDS\n"
+#puts [lindex $libraryIds 2500] ; #
+#puts [lindex $libraryIds end] ; # last ID
+#puts [llength $libraryIds]
+puts $logFile "[clock format [clock seconds] -format "%y%m%d %H:%M:%S"] >> LIBRARY IDS: [llength $libraryIds]"
+#puts "\n\n\nLIBRARY REJECTS\n"
+#puts [lindex $libraryRejects end] ; # last ID
+#puts [llength $libraryRejects]
+set schoolsIdsRemove {}
+foreach i $libraryIds {
+	if {[lsearch -exact $schoolsIds $i]>-1} {
+		lappend schoolsIdsRemove [lindex $i {0 0}]
+	}
+}
+#puts "\n\n\nSCHOOLS IDS REMOVE FROM EVALUATION 'CAUSE WE GOT AN ALL-FIELDS MATCH ON AT LEAST ONE SCHOOL RECORD\n"
+#puts [lindex $schoolsIdsRemove 2500] ; #
+#puts [lindex $schoolsIdsRemove end] ; # last ID
+#puts [llength $schoolsIdsRemove]
+puts $logFile "[clock format [clock seconds] -format "%y%m%d %H:%M:%S"] >> SCHOOLS IDS TO REMOVE: [llength $schoolsIdsRemove]"
+# REMOVE REMOVABLE SCHOOLS IDS
+foreach i $schoolsIdsRemove {
+# JAMES: ugly uglly ugly. The leading dot is really to match a brace that's present 'cause I over-listed these lists
+	set pattern "^.$i.*?$"
+	set schoolsIds [lsearch -all -inline -not -regexp $schoolsIds $pattern]
+}
+# USE ONLY UNIQUE SCHOOL IDS
+set schoolsIds [lsort -dictionary -index {0 0} -unique $schoolsIds]
+#puts "\n\n\nSCHOOLS IDS\n"
+#puts [lindex $schoolsIds end] ; # last ID
+#puts [llength $schoolsIds]
+puts $logFile "[clock format [clock seconds] -format "%y%m%d %H:%M:%S"] >> SCHOOLS IDS REMAINING: [llength $schoolsIds]"
+set libraryAddIds {}
+foreach i $schoolsIds {
+	if {[lsearch -exact $libraryIds $i]==-1} {
+		lappend libraryAddIds $i
+	}
+}
+#puts "\n\n\nLIBRARY ADD IDS\n"
+#puts [lindex $libraryAddIds end] ; # last ID
+#puts [llength $libraryAddIds]
+puts $logFile "[clock format [clock seconds] -format "%y%m%d %H:%M:%S"] >> LIBRARY ADD IDS: [llength $libraryAddIds]"
+if {$manual eq false} {
+	foreach id $libraryAddIds {
+		set record {}
+		set patronOverlay ""
+		set patronAddress {}
+		set patronBarcodes {}
+		set patronNames {}
+		set patronNotes {}
+		set patronGuardians {}
+		set patronEmails {}
+		set id [lindex $id 0 0]
+		#puts "looking for $id in schoolsRecords"
+		set reSearchSchoolsID_NUMBER "^(?:\[^\t]*\t)\{$schoolsID_NUMBER\}$id\t"
+		if {
+			[lsearch -regexp $schoolsRecords $reSearchSchoolsID_NUMBER]>-1
+		} then {
+			set patronOverlay "INSERT"
+			set record [split [lsearch -inline -regexp $schoolsRecords $reSearchSchoolsID_NUMBER] "\t"]
+			set patronBarcode [lindex $record $schoolsID_NUMBER]
+			lappend patronBarcodes $patronBarcode
+			set patronNameFirst [lindex $record $schoolsFIRST_NAME]
+			set patronNameLast [lindex $record $schoolsLAST_NAME]
+			set patronNameMiddle [lindex $record $schoolsMIDDLE_NAME]
+			set patronName "[string trim $patronNameLast], [string trim $patronNameFirst]"
+			if {
+				[string length $patronNameMiddle]>0
+			} then {
+				append patronNameMiddle " " [string trim $patronNameMiddle]
+			}
+			lappend patronNames [string toupper $patronName]
+			set patronSchoolCode [lindex $record $schoolsSCHOOL_CODE]
+			set patronGuardianName ""
+			append patronGuardianName [string toupper [string trim [lindex $record $schoolsPARENT_GUARD_FIRSTNAME]]] " " \
+				[string toupper [string trim [lindex $record $schoolsPARENT_GUARD_LASTNAME]]]
+			set patronGuardianSchoolsInsert 1
+			if {
+				[string length $schoolsEmail]>0
+			} then {
+				lappend patronEmails [string toupper [lindex $record $schoolsEmail]]
+			}
+			set reSearchLibraryCARD "^(?:\[^\t]*\t)\{$libraryCARD\}(?:\[^\t]+\\|)*${id}(?:\\|\[^\t]*)*\t"
+			if {
+				[lsearch -regexp $libraryRecords $reSearchLibraryCARD]>-1
+			} then {
+				set patronOverlay "OVERLAY"
+				set recordLibrary [split [lsearch -inline -regexp $libraryRecords $reSearchLibraryCARD] "\t"]
+				set patronBarcodesLibrary [split [lindex $recordLibrary $libraryCARD] |]
+                                foreach i $patronBarcodesLibrary {
+                                        lappend patronBarcodes [string toupper [string trim $i]]
+                                }
+				set patronNamesLibrary [split [lindex $recordLibrary $libraryPATRN_NAME] |]
+                                foreach i $patronNamesLibrary {
+                                        lappend patronNames [string trim $i]
+                                }
+				set patronNotesLibrary [split [lindex $recordLibrary $libraryNOTE_PATRON] |]
+                                foreach i $patronNotesLibrary {
+                                        if {
+						[string equal -nocase -length 22 "MNPS STUDENT $id" $i]==0 && \
+						[string equal -nocase -length 21 "MNPS STUDENT; SCHOOL:" $i]==0 && \
+						[string equal -nocase -length 35 "ATTENTION - PLEASE READ - P-type 33" $i]==0 
+                                        } then {
+                                                lappend patronNotes [string trim [regsub -all {  +} $i " "]]
+                                        }
+                                }
+				set patronGuardiansLibrary [split [lindex $recordLibrary $libraryG_NAME] |]
+				set rePatronGuardianStatement [string trim [clock format [clock scan $expDate -format "%m-%d-%Y"] -format "%N/%e/%Y"]]
+				append rePatronGuardianStatement ": $patronGuardianName"
+				set rePatronGuardianStatement [string trim $rePatronGuardianStatement]
+				foreach i $patronGuardiansLibrary {
+					set i [string trim [regsub -all {  +} $i " "]]
+					if {
+						[regexp -nocase -- $rePatronGuardianStatement $i]==1
+					} then {
+						set patronGuardianSchoolsInsert 0
+					}
+					lappend patronGuardians $i
+				}
+				set patronEmailsLibrary [split [lindex $recordLibrary $libraryEMAIL_ADDR] ",|"]
+				foreach i $patronEmailsLibrary {
+					lappend patronEmails [string toupper [string trim $i]]
+				}
+			}
+
+			set thisNote ""
+			append thisNote "MNPS STUDENT " $id \
+				"; SCHOOL: " [string toupper [lindex $record $schoolsSCHOOL_NAME]] \
+				"; GRADE " [string toupper [lindex $record $schoolsGRADE]] \
+				"; HOMEROOM " [string toupper [lindex $record $schoolsHOMEROOM_NUMBER]] \
+				"; AUTOMATED " $patronOverlay " " [clock format [clock seconds] -format %D]
+			set patronNotes [linsert $patronNotes 0 $thisNote]
+			set patronBirthdate [lindex $record $schoolsDATE_OF_BIRTH]
+			set patronZIP [lindex $record $schoolsZIP]
+			if {
+				$patronGuardianSchoolsInsert==1
+			} then {
+				set patronGuardianSchools ""
+				append patronGuardianSchools "MNPS Guarantor effective " \
+					[clock format [clock seconds] -format %D] \
+					" - " [clock format [clock scan $expDate -format "%m-%d-%Y"] -format %D] ": " \
+					$patronGuardianName
+				set patronGuardians [linsert $patronGuardians 0 $patronGuardianSchools]
+			}
+			if {
+				[string length [lindex $record $schoolsSTREET_NUMBER]] > 0
+                        } then {
+                                append patronAddress [string toupper [lindex $record $schoolsSTREET_NUMBER]] " "
+                        }
+                        if {
+                                [string length [lindex $record $schoolsSTREET_NAME]] > 0
+                        } then {
+                                append patronAddress [string toupper [lindex $record $schoolsSTREET_NAME]] " "
+                        }
+                        if {
+                                [string length [lindex $record $schoolsADDRESS_TYPE]] > 0
+                        } then {
+                                append patronAddress [string toupper [lindex $record $schoolsADDRESS_TYPE]] " "
+                        }
+                        if {
+                                [string length [lindex $record $schoolsADDRESS_DIRECTION]] > 0
+                        } then {
+                                append patronAddress [string toupper [lindex $record $schoolsADDRESS_DIRECTION]] " "
+                        }
+                        if {
+                                [string length [lindex $record $schoolsAPARTMENT_NUMBER]] > 0
+                        } then {
+                                append patronAddress [string toupper [lindex $record $schoolsAPARTMENT_NUMBER]] " "
+                        }
+                        set patronAddress [string trim $patronAddress]
+                        append patronAddress "$" \
+                                [string toupper [lindex $record $schoolsCITY]] ", " \
+                                [string toupper [lindex $record $schoolsSTATE]] " " \
+                                [lindex $record $schoolsZIP]
+			set patronPhone ""
+			if {
+				[string length [lindex $record $schoolsHomePhone]] > 0
+			} then {
+				set patronPhone [lindex $record $schoolsHomePhone]
+			}
+			set patronEmail [join [lsort -dictionary -unique $patronEmails] ","]
+			set thisRecord ""
+			append thisRecord [join [lsort -dictionary -unique $patronBarcodes] |] \
+				"\t" [join [lsort -unique $patronNames] |] \
+				"\t" $patronSchoolCode \
+				"\t" $patronOverlay \
+				"\t" [join [lsort -unique $patronNotes] |] \
+				"\t" $patronBirthdate \
+				"\t" $patronZIP \
+				"\t" [join [lsort -unique $patronGuardians] |] \
+				"\t" $patronAddress \
+				"\t" $patronPhone \
+				"\t" $patronEmail
+
+			lappend libraryAddRecords $thisRecord
+		}
+	}
+}
+
+if {[info exists libraryAddRecords] == 0} then {
+	puts "No new records in SCHOOLS data"
+	exit 0
+}
+set libraryAddsFile [open "$localPath$libraryAddsFileName.csv" w]
+foreach libraryAddRecord $libraryAddRecords {
+	puts $libraryAddsFile "$libraryAddRecord"
+}
+close $libraryAddsFile
+
+# insert right brace here for closing if 0 comment block
+
+# php script composes MARC patron file
+if {$manual eq false} {
+	exec php ./bin/STUDENTS-ELEMENTARY.php
+} else {
+	exec php ./bin/STUDENTS-ELEMENTARY.php manual
+}
+
+# insert right brace here for closing if 0 comment block
+
+# PUT THE FILE TO INNOPAC
+spawn scp $localPath$libraryAddsFileName.mrc $solarisUser@$host:$libraryAddsFileName.pftp
+set timeout -1
+expect "Password"
+send "$solarisUserPassword\r"
+expect "100%"
+sleep 1
+close
+set timeout $wait
+# CONNECT TO INNOPAC
+spawn ssh $INNOPACuser@$host
+expect {
+	# if RSA key for host is not yet set
+	"Are you sure you want to continue connecting (yes/no)?" {
+		send "yes\r"
+		#expect "login as:"
+		send "$INNOPACuser\r"
+		expect "Password:"
+		send "$INNOPACuserPassword\r"
+	}
+	"Password:" {
+		send "$INNOPACuserPassword\r"
+	}
+}
+expect "What kind of Terminal are you using?"
+send "v"
+expect "Please confirm: are you using a VT100 or compatible terminal?"
+send "y"
+# INNOPAC LOAD PATRON RECORDS
+expect "A > ADDITIONAL system functions"
+send "A"
+expect "M > Read/write MARC records"
+send "M"
+expect "Please key your initials :"
+send "$INNOPACinitials\r"
+expect "Please key your password :"
+send "$INNOPACinitialsPassword\r"
+expect "P > Load MARC PATRON records from tape or FTS"
+send "P"
+expect -re "(\[0-9]+) > $libraryAddsFileName\.pftp"
+set expectMatch $expect_out(1,string)
+expect "M > PREPROCESS MARC records loaded via FTP"
+send "M"
+send $expectMatch
+# GET THE NUMBER OF RECORDS CONVERTED FROM .PFTP TO .PAT
+# NEED TO GET TIMTINGS RIGHT FOR expect STATEMENTS BEFORE UNCOMMENTING
+#expect -re "NUMBER OF INPUT RECORDS   - (\[0-9]+?) "
+#set pftp $expect_out(1,string)
+#expect -re "NUMBER OF OUTPUT RECORDS  - (\[0-9]+?) "
+#set pat $expect_out(1,string)
+#puts $logFile "[clock format [clock seconds] -format "%y%m%d %H:%M:%S"] >> $pftp pftp records converted to $pat records"
+expect "Press <SPACE> to continue"
+send " "
+expect -re "(\[0-9]+) > $libraryAddsFileName\.pat"
+set expectMatch $expect_out(1,string)
+expect "C > CONVERT a MARC file"
+send "C"
+expect "Enter file number"
+send $expectMatch
+#to place in INNOPAC load-testing mode remove octothorpes from the next three lines
+#expect "T > Loading mode"
+#send "T"
+#expect "T > TESTING mode"
+#end testing mode code
+expect "L > LOAD records"
+send "L"
+sleep 10
+expect "Press <SPACE> to continue"
+send " "
+sleep 10
+# LOAD REPORT
+expect -re "Number of input records\\s+-\\s(\[0-9]+?).+Number of errors\\s+-\\s(\[0-9]+?).+PATRON.+?(\[0-9]+)\\s.+?\\s(\[0-9]+)\\s+(\[0-9]+)\\s+(\[0-9]+)"
+set loadReportInput $expect_out(1,string)
+set loadReportErrors $expect_out(2,string)
+set loadReportCreated $expect_out(3,string)
+set loadReportOverlayed $expect_out(4,string)
+set loadReportRejected $expect_out(5,string)
+set loadReportRead $expect_out(6,string)
+puts $logFile "[clock format [clock seconds] -format "%y%m%d %H:%M:%S"] >> LOAD REPORT: input: $loadReportInput errors: $loadReportErrors created: $loadReportCreated overlayed: $loadReportOverlayed rejected: $loadReportRejected read:$loadReportRead"
+unset expect_out
+expect "Q > QUIT"
+send "Q"
+expect "Press <SPACE> to continue"
+send " "
+# CLEAN UP
+# grab file number and name before the options menu renders
+expect -re "(\[0-9]+) > $libraryAddsFileName\.pat"
+expect "+ > ADDITIONAL options"
+send "+"
+expect "R > REMOVE files"
+send "R"
+expect "Input numbers of files to be removed:"
+sleep 1
+send $expect_out(1,string)
+send "\r"
+expect "Remove file $libraryAddsFileName\.pat"
+send "y"
+expect "+ > ADDITIONAL options"
+send "+"
+expect "R > REMOVE files"
+send "R"
+expect "Input numbers of files to be removed:"
+sleep 1
+expect -re "(\[0-9]+) > $libraryAddsFileName\.pftp"
+send $expect_out(1,string)
+send "\r"
+expect "Remove file $libraryAddsFileName\.pftp"
+send "y"
+expect "+ > ADDITIONAL options"
+send "+"
+expect "R > REMOVE files"
+# .errlog?
+sleep 1
+# GO TO MAINMENU
+expect "+ > ADDITIONAL options"
+send "+"
+expect "Q > QUIT"
+send "Q"
+expect "Q > QUIT"
+send "Q"
+expect "Q > QUIT"
+send "Q"
+# CREATE LIST
+expect "M > MANAGEMENT information"
+send "M"
+expect "L > Create LISTS of records"
+send "L"
+expect "Please key your initials :"
+send "$INNOPACinitials\r"
+expect "Please key your password :"
+send "$INNOPACinitialsPassword\r"
+expect "$reviewFile > $name"
+send $reviewFile
+expect "N > NEW BOOLEAN search, delete the review file"
+send "N"
+expect "Are you sure you want to delete the current review file?"
+send "Y"
+expect "P > PATRON list"
+send "P"
+expect "05 P TYPE:"
+send "05"
+expect "Enter boolean condition (=, ~, >, <, G, L, W, N)"
+send "="
+expect "P TYPE ="
+send "033"
+expect "Enter action ( A for AND, O for OR, S to START search )"
+send "S"
+expect "What name would you like to give this file of records?"
+send "$name\r"
+set timeout -1
+expect "BOOLEAN SEARCH COMPLETE"
+set timeout $wait
+send " "
+# insert right brace here for closing if 0 comment block
+
+exit 0
