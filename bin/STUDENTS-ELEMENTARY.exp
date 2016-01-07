@@ -31,7 +31,7 @@
 # 	scp MARC file to Millennium server
 # 	log into INNOPAC, load patron records, create new list of P TYPE 33 patrons
 
-#exp_internal 1 ; # verbose debugging to stdout
+exp_internal 1 ; # verbose debugging to stdout
 #log_user 0 ; # do NOT send screens to stdout
 
 # determine whether "m" or "manual" was included as an argument
@@ -620,14 +620,14 @@ expect "Press <SPACE> to continue"
 send " "
 sleep 10
 # LOAD REPORT
-expect -re "Number of input records\\s+-\\s(\[0-9]+?).+Number of errors\\s+-\\s(\[0-9]+?).+PATRON.+?(\[0-9]+)\\s.+?\\s(\[0-9]+)\\s+(\[0-9]+)\\s+(\[0-9]+)"
+expect -re "Number of input records\\s+-\\s(\[0-9]+).+Number of errors\\s+-\\s(\[0-9]+).+PATRON.+?(\[0-9]+)\\s.+?\\s(\[0-9]+)\\s+(\[0-9]+)\\s+(\[0-9]+)"
 set loadReportInput $expect_out(1,string)
 set loadReportErrors $expect_out(2,string)
 set loadReportCreated $expect_out(3,string)
 set loadReportOverlayed $expect_out(4,string)
 set loadReportRejected $expect_out(5,string)
 set loadReportRead $expect_out(6,string)
-puts $logFile "[clock format [clock seconds] -format "%y%m%d %H:%M:%S"] >> LOAD REPORT: input: $loadReportInput errors: $loadReportErrors created: $loadReportCreated overlayed: $loadReportOverlayed rejected: $loadReportRejected read:$loadReportRead"
+puts $logFile "[clock format [clock seconds] -format "%y%m%d %H:%M:%S"] >> LOAD REPORT: input:$loadReportInput errors:$loadReportErrors created:$loadReportCreated overlayed:$loadReportOverlayed rejected:$loadReportRejected read:$loadReportRead"
 unset expect_out
 expect "Q > QUIT"
 send "Q"

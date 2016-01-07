@@ -7,12 +7,16 @@
 # Millennium 2014 2.0.0_15
 #
 # to do: 
-#	post to github
-#	determine wither "overlisting" is an issue, e.g., schoolsIds takes the form {{000000 100 07-31-2016}} {{000001 100 07-31-2016}} etc 
+#	fix duplication of last INSERT record
+#	move l.~263 problem barcodes to config.pwd.ini
+#	move l.~268 valid school codes to config.pwd.ini
+#	determine whether "overlisting" is an issue, e.g., schoolsIds takes the form {{000000 100 07-31-2016}} {{000001 100 07-31-2016}} etc 
+#	change schoolsIds and libraryIds and similar "ID" variable names to describe IDs, full records, tuples, whatever's appropriate
 #	overlay: patrons not in mnps data with "correct" EXP date should be given EXP DATE of today that should stick
 #	add auto|manual arg
 #
 # 20151119 : changed INNOPAC load table p @ov_protect to allow overwriting barcode, name, and note fields
+#	post to github
 # 20151118 : improvements to patron record creation and overlay
 #	eliminate duplicate barcode fields from record overlays
 #	eliminate duplicate name fields from record overlays
@@ -115,7 +119,7 @@ puts $logFile "[clock format [clock seconds] -format "%y%m%d %H:%M:%S"] >> Start
 #if 0 {
 
 # SCHOOLS: RETRIEVE DATA
-# SCHOOLS deliver data to home/limitless/data
+# SCHOOLS deliver data to /home/limitless/data
 if {$manual eq false} {
 	# SCHOOLS: UNZIP
 	spawn unzip "$localPath$schoolsFileZip" -d "$localPath"
@@ -352,11 +356,6 @@ if {$manual eq false} {
 		} then {
 			set patronOverlay "INSERT"
 			#puts "found $id in schoolsRecords"
-#			lappend libraryAddRecords [ string toupper [ \
-#				regsub -- {(^[0-9]{6})\t([^\t]*)\t([^\t]*)\t([^\t]*)\t([^\t]*)\t([^\t]*)\t([^\t]*)\t([^\t]*)\t([0-9a-z]{3})\t.*$} \
-#				[lindex $schoolsRecords [lsearch $schoolsRecords $id*]] \
-#				"\\1,\\3,\\2,\\4,\\9"
-#			]]
 			regexp -- {(^[0-9]{6})\t([^\t]*)\t([^\t]*)\t([^\t]*)\t(?:[^\t]*\t[^\t]*\t[^\t]*\t[^\t]*)\t([0-9a-z]{3})\t.*$} \
 			[lindex $schoolsRecords [lsearch $schoolsRecords $id*]] \
 			patronFullRecord patronBarcode patronNameFirst patronNameLast patronNameMiddle patronSchoolCode
@@ -518,7 +517,7 @@ send " "
 sleep 10
 
 # LOAD REPORT
-expect -re "Number of input records\\s+-\\s(\[0-9]+?).+Number of errors\\s+-\\s(\[0-9]+?).+PATRON.+?(\[0-9]+)\\s.+?\\s(\[0-9]+)\\s+(\[0-9]+)\\s+(\[0-9]+)"
+expect -re "Number of input records\\s+-\\s(\[0-9]+).+Number of errors\\s+-\\s(\[0-9]+).+PATRON.+?(\[0-9]+)\\s.+?\\s(\[0-9]+)\\s+(\[0-9]+)\\s+(\[0-9]+)"
 
 set loadReportInput $expect_out(1,string)
 set loadReportErrors $expect_out(2,string)
@@ -526,7 +525,7 @@ set loadReportCreated $expect_out(3,string)
 set loadReportOverlayed $expect_out(4,string)
 set loadReportRejected $expect_out(5,string)
 set loadReportRead $expect_out(6,string)
-puts $logFile "[clock format [clock seconds] -format "%y%m%d %H:%M:%S"] >> LOAD REPORT: input: $loadReportInput errors: $loadReportErrors created: $loadReportCreated overlayed: $loadReportOverlayed rejected: $loadReportRejected read: $loadReportRead"
+puts $logFile "[clock format [clock seconds] -format "%y%m%d %H:%M:%S"] >> LOAD REPORT: input:$loadReportInput errors:$loadReportErrors created:$loadReportCreated overlayed:$loadReportOverlayed rejected:$loadReportRejected read: $loadReportRead"
 unset expect_out
 
 expect "Q > QUIT"
