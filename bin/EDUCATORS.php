@@ -6,9 +6,6 @@
 // To be called from EDUCATORS.exp
 // PHP Script mostly cribbed from Mark Noble's work
 
-
-// CURRENTLY UNFINISHED
-
 // 20151118: adjust for incoming record format like
 //	999999|25192999999999	LAST, FIRST|LAST, FIRST M|LAST, FIRST MIDDLE	999
 // 20150804: adjustments for 2015-2016 school year
