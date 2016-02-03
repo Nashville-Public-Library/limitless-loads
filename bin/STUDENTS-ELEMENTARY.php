@@ -6,6 +6,7 @@
 // To be called from STUDENTS-ELEMENTARY.exp
 // PHP Script mostly cribbed from Mark Noble's work
 
+// 20160203: Eliminate patron note field "ATTENTION - PLEASE READ - P-type 33 accounts are to be used for Limitless Libraries school delivery only..."
 // 20151215: adjust for incoming record format like
 // Patron Barcodes	Patron Names	School Code	Insert vs. Overlay	Patron Notes	Patron Birth Date	Patron ZIP	Patron Guardian	Patron Address	Patron Phone	Patron Email
 // 20151210: adjust for incoming record format like
@@ -84,7 +85,7 @@ while (($rawData = fgetcsv($exportFhnd, 0, "\t")) !== FALSE) {
 	foreach ($patronData['patronNotes'] as $patronNote) {
 		$patronData['500_NOTE'][] = $patronNote;
 	}
-	$patronData['500_NOTE'][] = 'ATTENTION - PLEASE READ - P-type 33 accounts are to be used for Limitless Libraries school delivery only.  Do not attach a 25192 card to this account.  Do not check out items on this account.';
+	//$patronData['500_NOTE'][] = 'ATTENTION - PLEASE READ - P-type 33 accounts are to be used for Limitless Libraries school delivery only.  Do not attach a 25192 card to this account.  Do not check out items on this account.';
 	$patronData['550_EMAIL'] = strtoupper($patronData['patronEmail']);
 	$patronData['600_PIN'] = date("md", strtotime($patronData['birth_date']));
 
