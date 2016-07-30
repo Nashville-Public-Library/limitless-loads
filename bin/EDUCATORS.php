@@ -6,6 +6,9 @@
 // To be called from EDUCATORS.exp
 // PHP Script mostly cribbed from Mark Noble's work
 
+// 20160729: adjustments for 2016-2017 shcool year
+//	+ EXP DATE 080 = 07-31-2017
+//	+ PIN 600 = 2016
 // 20151118: adjust for incoming record format like
 //	999999|25192999999999	LAST, FIRST|LAST, FIRST M|LAST, FIRST MIDDLE	999
 // 20150804: adjustments for 2015-2016 school year
@@ -56,7 +59,7 @@ while (($rawData = fgetcsv($exportFhnd, 0, "\t")) !== FALSE) {
 		}
 		$patronData['030_BARCODE'][] = $educatorID;
 	}
-	$patronData['080_EXP_DATE'] = "07-31-2016";
+	$patronData['080_EXP_DATE'] = "07-31-2017";
 	$patronData['081_AGE_GRP'] = "a";
 	$patronData['082_REG_LIB'] = "3";
 	$patronData['084_PTYPE'] = "30";
@@ -74,7 +77,7 @@ while (($rawData = fgetcsv($exportFhnd, 0, "\t")) !== FALSE) {
 	foreach ($patronData['educatorNotes'] as $educatorNote) {
 		$patronData['500_NOTE'][] = $educatorNote;
 	}
-	$patronData['600_PIN'] = "2015";
+	$patronData['600_PIN'] = "2016";
 
 	if (array_key_exists($patronData['030_BARCODE'][0], $allPatrons)){
 		//already have this patron, must be a secondary address
