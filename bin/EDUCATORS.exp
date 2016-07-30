@@ -118,7 +118,7 @@ puts $logFile "[clock format [clock seconds] -format "%y%m%d %H:%M:%S"] >> Start
 # block for commenting out lots of lines
 # N.B.: we cannot place commented right-braces below in the code
 # they will be interpreted as the closing brace of this if 0 conditional
-if 0 {
+#if 0 {
 
 # SCHOOLS: RETRIEVE DATA
 # SCHOOLS deliver data to /home/limitless/data
@@ -250,7 +250,6 @@ set timeout $wait
 #puts $logFile "[clock format [clock seconds] -format "%y%m%d %H:%M:%S"] >> Retrieved file from INNOPAC"
 
 # insert right brace here for closing if 0 comment block
-}
 
 # COMPARE LIBRARY AND SCHOOLS DATA
 set schoolsFile [open $localPath$schoolsFileName]
@@ -468,7 +467,6 @@ foreach libraryAddRecord $libraryAddRecords {
 close $libraryAddsFile
 
 # insert right brace here for closing if 0 comment block
-exit 0
 
 # php script composes MARC patron file
 if {$manual eq false} {
