@@ -8,13 +8,15 @@
 #
 # to do: 
 #	fix duplication of last INSERT record
-#	move l.~263 problem barcodes to config.pwd.ini
-#	move l.~268 valid school codes to config.pwd.ini
 #	determine whether "overlisting" is an issue, e.g., schoolsIds takes the form {{000000 100 07-31-2016}} {{000001 100 07-31-2016}} etc 
 #	change schoolsIds and libraryIds and similar "ID" variable names to describe IDs, full records, tuples, whatever's appropriate
 #	overlay: patrons not in mnps data with "correct" EXP date should be given EXP DATE of today that should stick
 #	add auto|manual arg
 #
+# 20160729 : fix patron with multiple school records entering Millennium with invalid hold pickup branch
+# 20160719 : 
+#	move l.~263 problem barcodes to config.pwd.ini
+#	move l.~268 valid school codes to config.pwd.ini
 # 20151119 : changed INNOPAC load table p @ov_protect to allow overwriting barcode, name, and note fields
 #	post to github
 # 20151118 : improvements to patron record creation and overlay
@@ -116,7 +118,7 @@ puts $logFile "[clock format [clock seconds] -format "%y%m%d %H:%M:%S"] >> Start
 # block for commenting out lots of lines
 # N.B.: we cannot place commented right-braces below in the code
 # they will be interpreted as the closing brace of this if 0 conditional
-#if 0 {
+if 0 {
 
 # SCHOOLS: RETRIEVE DATA
 # SCHOOLS deliver data to /home/limitless/data
@@ -248,6 +250,7 @@ set timeout $wait
 #puts $logFile "[clock format [clock seconds] -format "%y%m%d %H:%M:%S"] >> Retrieved file from INNOPAC"
 
 # insert right brace here for closing if 0 comment block
+}
 
 # COMPARE LIBRARY AND SCHOOLS DATA
 set schoolsFile [open $localPath$schoolsFileName]
@@ -258,25 +261,60 @@ set schoolsRecords [split $data \n]
 #puts "\n\n\nSCHOOLS RECORDS\n\n\n"
 #puts $schoolsRecords
 
-foreach line $schoolsRecords {
-	# eliminate known trouble accounts
-	if [
-		regexp {^(502192)\t} $line 1
-	] then {
-		continue
-	}
-	if [ 
-		regexp {\t(0br|100|105|110|111|115|120|122|130|135|142|145|152|165|175|181|182|184|185|200|205|211|215|225|230|235|238|240|242|252|260|265|270|275|280|285|290|295|308|310|315|320|325|330|335|340|345|350|355|360|365|370|375|380|395|397|400|405|410|415|420|422|434|435|440|448|450|451|452|455|460|465|470|485|495|496|497|498|500|505|510|520|522|530|532|535|540|545|550|551|552|555|560|562|563|575|576|577|585|590|595|600|601|610|612|613|615|618|620|632|640|650|655|670|675|682|681|685|686|690|705|710|715|717|725|730|735|755|765|770|775|783|784|787|790|805)\t} $line 1
-	] then {
-		if [
-			regsub {^(\d{6})\t(?:.*?\t){6}(\d{3})\t.*$} $line "\\1\t\\2\t$expDate" line
-		] then {
-			lappend schoolsIds [list [split $line "\t"]]
-		}
-	}
-}
-set schoolsIds [lsort -dictionary -index {0 0} $schoolsIds]
+# 20160719 JAMES is commenting this block out to include code from STUDENTS-ELEMENTARY.exp. Once proven, this commented block should be deleted.
+#foreach line $schoolsRecords {
+#	# eliminate known trouble accounts
+#	if [
+#		regexp {^(502192)\t} $line 1
+#	] then {
+#		continue
+#	}
+#	if [ 
+#		regexp {\t(0br|100|105|110|111|115|120|122|130|135|142|145|152|165|175|181|182|184|185|200|205|211|215|225|230|235|238|240|242|252|260|265|270|275|280|285|290|295|308|310|315|320|325|330|335|340|345|350|355|360|365|370|375|380|395|397|400|405|410|415|420|422|434|435|440|448|450|451|452|455|460|465|470|485|495|496|497|498|500|505|510|520|522|530|532|535|540|545|550|551|552|555|560|562|563|575|576|577|585|590|595|600|601|610|612|613|615|618|620|632|640|650|655|670|675|682|681|685|686|690|705|710|715|717|725|730|735|755|765|770|775|783|784|787|790|805)\t} $line 1
+#	] then {
+#		if [
+#			regsub {^(\d{6})\t(?:.*?\t){6}(\d{3})\t.*$} $line "\\1\t\\2\t$expDate" line
+#		] then {
+#			lappend schoolsIds [list [split $line "\t"]]
+#		}
+#	}
+#}
 
+# SCHOOL RECORD COLUMNS, HARDCODED
+set schoolsID_NUMBER 0
+set schoolsFIRST_NAME 1
+set schoolsLAST_NAME 2
+set schoolsMIDDLE_NAME 3
+set schoolsSCHOOL_CODE 8
+
+set reSchoolsSCHOOL_CODE "^(?:\[^\t]*\t)\{$schoolsSCHOOL_CODE}(\[^\t]*)\t"
+set reSchoolsID_NUMBER "^(?:\[^\t]*\t)\{$schoolsID_NUMBER}(\[^\t]*)\t"
+
+foreach line $schoolsRecords {
+        # eliminate known trouble accounts
+        regexp -- $reSchoolsID_NUMBER $line -> schoolsID_NUMBERValue
+        set isTroubleAccount [lsearch $troubleAccounts [string trim $schoolsID_NUMBERValue]]
+        if {
+                $isTroubleAccount > -1
+        } then {
+                continue
+        }
+        # accept only accounts at valid schools
+        regexp -- $reSchoolsSCHOOL_CODE $line -> schoolsSCHOOL_CODEValue
+        set isValidSchool [lsearch $validSchools [string trim $schoolsSCHOOL_CODEValue]]
+        if {
+                $isValidSchool == -1
+        } then {
+                #puts "skip $schoolsID_NUMBERValue invalid school $schoolsSCHOOL_CODEValue"
+                continue
+        } else {
+		lappend schoolsRecordsValid $line
+                set line "[string trim $schoolsID_NUMBERValue]\t[string trim $schoolsSCHOOL_CODEValue]\t$expDate"
+		lappend schoolsIds [list [split $line "\t"]]
+        }
+}
+
+set schoolsIds [lsort -dictionary -index {0 0} $schoolsIds]
 #puts "\n\n\nSCHOOLS IDS\n"
 #puts [lindex $schoolsIds 2500] ;
 #puts [lindex $schoolsIds end] ; # last ID
@@ -303,6 +341,7 @@ set libraryIds [lsort -dictionary -index {0 0} $libraryIds]
 #puts [llength $libraryIds]
 puts $logFile "[clock format [clock seconds] -format "%y%m%d %H:%M:%S"] >> LIBRARY IDS: [llength $libraryIds]"
 
+# REMOVE FROM EVALUATION 'CAUSE WE GOT AN ALL-FIELDS MATCH ON AT LEAST ONE SCHOOL RECORD
 set schoolsIdsRemove {}
 foreach i $libraryIds {
 	if {[lsearch -exact $schoolsIds $i]>-1} {
@@ -350,14 +389,14 @@ if {$manual eq false} {
 		set patronNames {}
 		set patronNotes {}
 		set id [lindex $id 0 0]
-		#puts "looking for $id in schoolsRecords"
+		#puts "looking for $id in schoolsRecordsValid"
 		if {
-			[lsearch $schoolsRecords $id*]>-1
+			[lsearch $schoolsRecordsValid $id*]>-1
 		} then {
 			set patronOverlay "INSERT"
-			#puts "found $id in schoolsRecords"
+			#puts "found $id in schoolsRecordsValid"
 			regexp -- {(^[0-9]{6})\t([^\t]*)\t([^\t]*)\t([^\t]*)\t(?:[^\t]*\t[^\t]*\t[^\t]*\t[^\t]*)\t([0-9a-z]{3})\t.*$} \
-			[lindex $schoolsRecords [lsearch $schoolsRecords $id*]] \
+			[lindex $schoolsRecordsValid [lsearch $schoolsRecordsValid $id*]] \
 			patronFullRecord patronBarcode patronNameFirst patronNameLast patronNameMiddle patronSchoolCode
 			lappend patronBarcodes $patronBarcode
 			set patronName "[string trim $patronNameLast], [string trim $patronNameFirst]"
@@ -400,14 +439,14 @@ if {$manual eq false} {
 } else {
 	foreach id $libraryAddIds {
 		set id [lindex $id {0 0}]
-#		puts "looking for $id in schoolsRecords"
+#		puts "looking for $id in schoolsRecordsValid"
 		if {
-			[lsearch $schoolsRecords $id*]>-1
+			[lsearch $schoolsRecordsValid $id*]>-1
 		} then {
-#			puts "found $id in schoolsRecords"
+#			puts "found $id in schoolsRecordsValid"
 			lappend libraryAddRecords [ string toupper [ \
 				regsub -- {(^[0-9]{6})\t([0-9a-z]{3})\t[^\t]*\t([0-9]{6})\t([^\t]*)\t([^\t]*)\t([^\t]*)\t([^\t]*)$} \
-				[lindex $schoolsRecords [lsearch $schoolsRecords $id*]] \
+				[lindex $schoolsRecordsValid [lsearch $schoolsRecordsValid $id*]] \
 				"\\1,\\6,\\4,\\5,\\2"
 			]]
 		}
@@ -429,6 +468,7 @@ foreach libraryAddRecord $libraryAddRecords {
 close $libraryAddsFile
 
 # insert right brace here for closing if 0 comment block
+exit 0
 
 # php script composes MARC patron file
 if {$manual eq false} {
