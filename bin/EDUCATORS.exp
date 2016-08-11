@@ -12,7 +12,13 @@
 #	change schoolsIds and libraryIds and similar "ID" variable names to describe IDs, full records, tuples, whatever's appropriate
 #	overlay: patrons not in mnps data with "correct" EXP date should be given EXP DATE of today that should stick
 #	add auto|manual arg
+#	eliminate wrongheaded sleep statements, e.g., 
+#		expect "$reviewFile > $name"
+#		sleep 1
+#			should instead be looking for the buffer to get some more stuff in it:
+#		expect "$reviewFile > $name*Select review file to work on :"
 #
+# 20160810 : fixes "201417 should not overlay patron 2519201417..."
 # 20160729 : fix patron with multiple school records entering Millennium with invalid hold pickup branch
 # 20160719 : 
 #	move l.~263 problem barcodes to config.pwd.ini
@@ -57,7 +63,7 @@
 #
 
 #exp_internal 1 ; # verbose debugging to stdout
-log_user 0 ; # do NOT send screens to stdout
+#log_user 0 ; # do NOT send screens to stdout
 
 # determine whether "m" or "manual" was included as an argument
 if { [lindex $argv 0] eq "m" || [lindex $argv 0] eq "manual" } then  {
@@ -118,7 +124,7 @@ puts $logFile "[clock format [clock seconds] -format "%y%m%d %H:%M:%S"] >> Start
 # block for commenting out lots of lines
 # N.B.: we cannot place commented right-braces below in the code
 # they will be interpreted as the closing brace of this if 0 conditional
-#if 0 {
+if 0 {
 
 # SCHOOLS: RETRIEVE DATA
 # SCHOOLS deliver data to /home/limitless/data
@@ -134,6 +140,7 @@ if {$manual eq false} {
 }
 
 # insert right brace here for closing if 0 comment block
+}
 
 # CONNECT TO INNOPAC
 spawn ssh $INNOPACuser@$host
@@ -164,9 +171,8 @@ expect "Please key your initials :"
 send "$INNOPACinitials\r"
 expect "Please key your password :"
 send "$INNOPACinitialsPassword\r"
-sleep 1
 # TO DO: FORWARD TO REVIEW FILE PAGE
-expect "$reviewFile > $name"
+expect "$reviewFile > $name*Select review file to work on :"
 send $reviewFile
 expect "N > NEW BOOLEAN search, delete the review file"
 send "N"
@@ -238,13 +244,14 @@ puts "Sleeping for 10 seconds while Millennium output file writes"
 # file needs time to write before grabbing it
 sleep 10
 
+# insert right brace here for closing if 0 comment block
+
 # RETRIEVE THE FILE FROM INNOPAC
 spawn scp $solarisUser@$host:$solarisPath/$name.out $localPath$name.out
 set timeout -1
 expect "Password"
 send "$solarisUserPassword\r"
-expect "100%"
-sleep 1
+expect "100%*\n"
 close   
 set timeout $wait
 #puts $logFile "[clock format [clock seconds] -format "%y%m%d %H:%M:%S"] >> Retrieved file from INNOPAC"
@@ -259,25 +266,6 @@ set schoolsRecords [split $data \n]
 
 #puts "\n\n\nSCHOOLS RECORDS\n\n\n"
 #puts $schoolsRecords
-
-# 20160719 JAMES is commenting this block out to include code from STUDENTS-ELEMENTARY.exp. Once proven, this commented block should be deleted.
-#foreach line $schoolsRecords {
-#	# eliminate known trouble accounts
-#	if [
-#		regexp {^(502192)\t} $line 1
-#	] then {
-#		continue
-#	}
-#	if [ 
-#		regexp {\t(0br|100|105|110|111|115|120|122|130|135|142|145|152|165|175|181|182|184|185|200|205|211|215|225|230|235|238|240|242|252|260|265|270|275|280|285|290|295|308|310|315|320|325|330|335|340|345|350|355|360|365|370|375|380|395|397|400|405|410|415|420|422|434|435|440|448|450|451|452|455|460|465|470|485|495|496|497|498|500|505|510|520|522|530|532|535|540|545|550|551|552|555|560|562|563|575|576|577|585|590|595|600|601|610|612|613|615|618|620|632|640|650|655|670|675|682|681|685|686|690|705|710|715|717|725|730|735|755|765|770|775|783|784|787|790|805)\t} $line 1
-#	] then {
-#		if [
-#			regsub {^(\d{6})\t(?:.*?\t){6}(\d{3})\t.*$} $line "\\1\t\\2\t$expDate" line
-#		] then {
-#			lappend schoolsIds [list [split $line "\t"]]
-#		}
-#	}
-#}
 
 # SCHOOL RECORD COLUMNS, HARDCODED
 set schoolsID_NUMBER 0
@@ -406,12 +394,12 @@ if {$manual eq false} {
 			}
 			lappend patronNames [string toupper $patronName]
 			#puts "looking for $id in libraryRecords"
-			set re "(?:^|^.+\|)${id}(?:\|\[^\t]*\t|\t)"
+			set re "(^|^\[^\t]+\\|)${id}(\\|\[^\t]*\t|\t)"
 			if {
 				[lsearch -regexp $libraryRecords $re]>-1
 			} then {
 				set patronOverlay "OVERLAY"
-				#puts "found $id in libraryRecords"
+				puts "found $id in libraryRecords [lindex $libraryRecords [lsearch -regexp $libraryRecords $re]]"
 				regexp -- {(^[^\t]*)\t([^\t]*)\t[^\t]*\t[^\t]*\t([^\t]*)$} \
 				[lindex $libraryRecords [lsearch -regexp $libraryRecords $re]] \
 				patronFullRecordLibrary patronBarcodesLibrary patronNamesLibrary patronNotesLibrary
@@ -482,8 +470,7 @@ spawn scp $localPath$libraryAddsFileName.mrc $solarisUser@$host:$libraryAddsFile
 set timeout -1
 expect "Password"
 send "$solarisUserPassword\r"
-expect "100%"
-sleep 1
+expect "100%*\n"
 close   
 set timeout $wait
 
@@ -526,9 +513,9 @@ send $expectMatch
 
 # GET THE NUMBER OF RECORDS CONVERTED FROM .PFTP TO .PAT
 # NEED TO GET TIMTINGS RIGHT FOR expect STATEMENTS BEFORE UNCOMMENTING
-#expect -re "NUMBER OF INPUT RECORDS   - (\[0-9]+?) "
+#expect -re "NUMBER OF INPUT RECORDS   - (\[0-9]+?).*\n"
 #set pftp $expect_out(1,string)
-#expect -re "NUMBER OF OUTPUT RECORDS  - (\[0-9]+?) "
+#expect -re "NUMBER OF OUTPUT RECORDS  - (\[0-9]+?).*\n"
 #set pat $expect_out(1,string)
 #puts $logFile "[clock format [clock seconds] -format "%y%m%d %H:%M:%S"] >> $pftp pftp records converted to $pat records"
 
@@ -549,13 +536,14 @@ send $expectMatch
 
 expect "L > LOAD records"
 send "L"
-sleep 10
+set timeout -1
 expect "Press <SPACE> to continue"
+set timeout $wait
 send " "
-sleep 10
+#sleep 10
 
 # LOAD REPORT
-expect -re "Number of input records\\s+-\\s(\[0-9]+).+Number of errors\\s+-\\s(\[0-9]+).+PATRON.+?(\[0-9]+)\\s.+?\\s(\[0-9]+)\\s+(\[0-9]+)\\s+(\[0-9]+)"
+expect -re "Number of input records\\s+-\\s(\[0-9]+).+Number of errors\\s+-\\s(\[0-9]+).+PATRON.+?(\[0-9]+)\\s.+?\\s(\[0-9]+)\\s+(\[0-9]+)\\s+(\[0-9]+)*\n"
 
 set loadReportInput $expect_out(1,string)
 set loadReportErrors $expect_out(2,string)
