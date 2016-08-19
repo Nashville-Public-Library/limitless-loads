@@ -6,10 +6,15 @@
 # Millennium 2014 2.0.0_15
 #
 # to do:
+#	either proc or if 0 each section of code so it can be run in pieces. There are some weird braces somewhere...
 #	add auto|manual arg
 #	add logic to page forward when looking for reviewFile
 #	add check to review file to ensure it is big enough
 #
+# 20160819 : changes to accommodate new Schools extract format 2016-2017
+#	EXCLUDE GRADES P3,P4,K,1,2
+#	EXCLUDE STUDENTS WITH NPL_PERMISSION = No
+#	changed schools extract headers
 # 20151216 : fixes
 # 20151210 : improvements
 #	sync with EDUCATORS.exp improvements
@@ -31,8 +36,8 @@
 # 	scp MARC file to Millennium server
 # 	log into INNOPAC, load patron records, create new list of P TYPE 33 patrons
 
-exp_internal 1 ; # verbose debugging to stdout
-#log_user 0 ; # do NOT send screens to stdout
+exp_internal 0 ; # 1 = verbose debugging to stdout
+log_user 1 ; # 1 = send screens to stdout
 
 # determine whether "m" or "manual" was included as an argument
 if { [lindex $argv 0] eq "m" || [lindex $argv 0] eq "manual" } then  {
@@ -230,7 +235,6 @@ set timeout $wait
 
 # insert right brace here for closing if 0 comment block
 
-
 # COMPARE LIBRARY AND SCHOOLS DATA
 set schoolsFile [open $localPath$schoolsFileName]
 set data [read $schoolsFile]
@@ -240,31 +244,37 @@ set schoolsRecords [split $data \n]
 #puts $schoolsRecords
 # READ SCHOOLS RECORDS COLUMN HEADERS
 # 20151201 headers were
-#SCHOOL_CODE     TIER    SCHOOL_NAME     LAST_NAME       FIRST_NAME      MIDDLE_NAME     DATE_OF_BIRTH   ID_NUMBER       GRADE   HOMEROOM_NUMBER PARENT_GUARD_LASTNAME   PARENT_GUARD_FIRSTNAME  STREET_NUMBER   STREET_NAME     ADDRESS_TYPE    ADDRESS_DIRECTION    APARTMENT_NUMBER        CITY    STATE   ZIP     HomePhone       Email   Permission_NPL  ENROLLMENT_START_DATE
+# SCHOOL_CODE     TIER    SCHOOL_NAME     LAST_NAME       FIRST_NAME      MIDDLE_NAME     DATE_OF_BIRTH   ID_NUMBER       GRADE   HOMEROOM_NUMBER PARENT_GUARD_LASTNAME   PARENT_GUARD_FIRSTNAME  STREET_NUMBER   STREET_NAME     ADDRESS_TYPE    ADDRESS_DIRECTION    APARTMENT_NUMBER        CITY    STATE   ZIP     HomePhone       Email   Permission_NPL  ENROLLMENT_START_DATE
+# 20160819 headers were
+# School_Code     Tier    School_Name     Last_Name       First_Name      Middle_Name     DOB     studentNumber   Grade   homeroom_teacher        Parent_Gaurd_LastName   Parent_Gaurd_FirstName  Sreet_Number    Street_Name     Address_Type    Address_Direction       Apartment_Number        CITY    STATE   zip     homePhone       email   Permission_NPL  Enrollment_Start_Date 
+
 set schoolsColumns [split [lindex $schoolsRecords 0] "\t"]
-set schoolsSCHOOL_CODE [lsearch -exact $schoolsColumns "SCHOOL_CODE"]
-set schoolsSCHOOL_NAME [lsearch -exact $schoolsColumns "SCHOOL_NAME"]
-set schoolsLAST_NAME [lsearch -exact $schoolsColumns "LAST_NAME"]
-set schoolsFIRST_NAME [lsearch -exact $schoolsColumns "FIRST_NAME"]
-set schoolsMIDDLE_NAME [lsearch -exact $schoolsColumns "MIDDLE_NAME"]
-set schoolsDATE_OF_BIRTH [lsearch -exact $schoolsColumns "DATE_OF_BIRTH"]
-set schoolsID_NUMBER [lsearch -exact $schoolsColumns "ID_NUMBER"]
-set schoolsGRADE [lsearch -exact $schoolsColumns "GRADE"]
-set schoolsHOMEROOM_NUMBER [lsearch -exact $schoolsColumns "HOMEROOM_NUMBER"]
-set schoolsPARENT_GUARD_LASTNAME [lsearch -exact $schoolsColumns "PARENT_GUARD_LASTNAME"]
-set schoolsPARENT_GUARD_FIRSTNAME [lsearch -exact $schoolsColumns "PARENT_GUARD_FIRSTNAME"]
-set schoolsSTREET_NUMBER [lsearch -exact $schoolsColumns "STREET_NUMBER"]
-set schoolsSTREET_NAME [lsearch -exact $schoolsColumns "STREET_NAME"]
-set schoolsADDRESS_TYPE [lsearch -exact $schoolsColumns "ADDRESS_TYPE"]
-set schoolsADDRESS_DIRECTION [lsearch -exact $schoolsColumns "ADDRESS_DIRECTION"]
-set schoolsAPARTMENT_NUMBER [lsearch -exact $schoolsColumns "APARTMENT_NUMBER"]
+set schoolsSCHOOL_CODE [lsearch -exact $schoolsColumns "School_Code"]
+set schoolsSCHOOL_NAME [lsearch -exact $schoolsColumns "School_Name"]
+set schoolsLAST_NAME [lsearch -exact $schoolsColumns "Last_Name"]
+set schoolsFIRST_NAME [lsearch -exact $schoolsColumns "First_Name"]
+set schoolsMIDDLE_NAME [lsearch -exact $schoolsColumns "Middle_Name"]
+set schoolsDATE_OF_BIRTH [lsearch -exact $schoolsColumns "DOB"]
+set schoolsID_NUMBER [lsearch -exact $schoolsColumns "studentNumber"]
+set schoolsGRADE [lsearch -exact $schoolsColumns "Grade"]
+set schoolsHOMEROOM_NUMBER [lsearch -exact $schoolsColumns "homeroom_teacher"]
+set schoolsPARENT_GUARD_LASTNAME [lsearch -exact $schoolsColumns "Parent_Gaurd_LastName"]
+set schoolsPARENT_GUARD_FIRSTNAME [lsearch -exact $schoolsColumns "Parent_Gaurd_FirstName"]
+set schoolsSTREET_NUMBER [lsearch -exact $schoolsColumns "Sreet_Number"]
+set schoolsSTREET_NAME [lsearch -exact $schoolsColumns "Street_Name"]
+set schoolsADDRESS_TYPE [lsearch -exact $schoolsColumns "Address_Type"]
+set schoolsADDRESS_DIRECTION [lsearch -exact $schoolsColumns "Address_Direction"]
+set schoolsAPARTMENT_NUMBER [lsearch -exact $schoolsColumns "Apartment_Number"]
 set schoolsCITY [lsearch -exact $schoolsColumns "CITY"]
 set schoolsSTATE [lsearch -exact $schoolsColumns "STATE"]
-set schoolsZIP [lsearch -exact $schoolsColumns "ZIP"]
-set schoolsHomePhone [lsearch -exact $schoolsColumns "HomePhone"]
-set schoolsEmail [lsearch -exact $schoolsColumns "Email"]
-set reSchoolsSCHOOL_CODE "^(?:\[^\t]*\t)\{$schoolsSCHOOL_CODE}(\[^\t]*)\t"
-set reSchoolsID_NUMBER "^(?:\[^\t]*\t)\{$schoolsID_NUMBER}(\[^\t]*)\t"
+set schoolsZIP [lsearch -exact $schoolsColumns "zip"]
+set schoolsHomePhone [lsearch -exact $schoolsColumns "homePhone"]
+set schoolsEmail [lsearch -exact $schoolsColumns "email"]
+set schoolsPermission_NPL [lsearch -exact $schoolsColumns "Permission_NPL"]
+set reSchoolsSCHOOL_CODE "^(?:\[^\t]*\t)\{$schoolsSCHOOL_CODE\}(\[^\t]*)\t"
+set reSchoolsID_NUMBER "^(?:\[^\t]*\t)\{$schoolsID_NUMBER\}(\[^\t]*)\t"
+set reSchoolsGRADE "^(?:\[^\t]*\t)\{$schoolsGRADE\}(\[^\t]*)\t"
+set reSchoolsPermission_NPL "^(?:\[^\t]*\t)\{$schoolsPermission_NPL\}(\[^\t]*)\t"
 
 foreach line $schoolsRecords {
 	# eliminate known trouble accounts
@@ -273,6 +283,24 @@ foreach line $schoolsRecords {
 	if {
 		$isTroubleAccount > -1
 	} then {
+		#puts "skip $schoolsID_NUMBERValue as known trouble account"
+		continue
+	}
+	# eliminate records with Permission_NPL = No 
+	regexp -- $reSchoolsPermission_NPL $line -> schoolsPermission_NPLValue
+	if {
+		$schoolsPermission_NPLValue == "No"
+	} then {
+		#puts "skip $schoolsID_NUMBERValue has Permission_NPL $schoolsPermission_NPLValue"
+		continue
+	}
+	# accept only records with grade = 3 or 4
+	regexp -- $reSchoolsGRADE $line -> schoolsGRADEValue
+	set isValidGRADE [lsearch [list 3 4] [string trim $schoolsGRADEValue]]
+	if {
+		$isValidGRADE == -1
+	} then {
+		#puts "skip $schoolsID_NUMBERValue invalid grade $schoolsGRADEValue"
 		continue
 	}
 	# accept only accounts at valid schools
@@ -286,6 +314,7 @@ foreach line $schoolsRecords {
 	} else {
 		set line "[string trim $schoolsID_NUMBERValue]\t[string trim $schoolsSCHOOL_CODEValue]\t$expDate"
 		lappend schoolsIds [list [split $line "\t"]]
+		#puts [list [split $line "\t"]]
 	}
 }
 
@@ -310,9 +339,9 @@ set libraryPATRN_NAME [lsearch -exact $libraryColumns "PATRN NAME"]
 set libraryNOTE_PATRON [lsearch -exact $libraryColumns "NOTE(PATRON)"]
 set libraryG_NAME [lsearch -exact $libraryColumns "G. NAME"]
 set libraryEMAIL_ADDR [lsearch -exact $libraryColumns "EMAIL ADDR"]
-set reLibraryHOLD_LIBR "^(?:\[^\t]*\t)\{$libraryHOLD_LIBR}(?:\[a-z]{2})(\[^\t]\{3})\t"
-set reLibraryCARD "^(?:\[^\t]*\t)\{$libraryCARD}(?:\[^\t]+\\|)*(190\\d\{6})(?:\\|\[^\t]*)*\t"
-set reLibraryEXP_DATE "^(?:\[^\t]*\t)\{$libraryEXP_DATE}(\[-0-9]\{10})\t"
+set reLibraryHOLD_LIBR "^(?:\[^\t]*\t)\{$libraryHOLD_LIBR\}(?:\[a-z]{2})(\[^\t]\{3})\t"
+set reLibraryCARD "^(?:\[^\t]*\t)\{$libraryCARD\}(?:\[^\t]+\\|)*(190\\d\{6})(?:\\|\[^\t]*)*\t"
+set reLibraryEXP_DATE "^(?:\[^\t]*\t)\{$libraryEXP_DATE\}(\[-0-9]\{10\})\t"
 
 foreach line $libraryRecords {
 	set libraryHOLD_LIBRValue ""
@@ -326,7 +355,9 @@ foreach line $libraryRecords {
 		set line "[string trim $libraryCARDValue]\t[string trim $libraryHOLD_LIBRValue]\t$libraryEXP_DATEValue"
 		lappend libraryIds [list [split $line "\t"]]
 	} else {
+		# libraryRejects should contain the HEADER line and empty line at the bottom of file
 		lappend libraryRejects $line
+		# puts $line
 	}
 }
 set libraryIds [lsort -dictionary -index {0 0} $libraryIds]
@@ -338,6 +369,7 @@ puts $logFile "[clock format [clock seconds] -format "%y%m%d %H:%M:%S"] >> LIBRA
 #puts "\n\n\nLIBRARY REJECTS\n"
 #puts [lindex $libraryRejects end] ; # last ID
 #puts [llength $libraryRejects]
+
 set schoolsIdsRemove {}
 foreach i $libraryIds {
 	if {[lsearch -exact $schoolsIds $i]>-1} {
@@ -348,7 +380,8 @@ foreach i $libraryIds {
 #puts [lindex $schoolsIdsRemove 2500] ; #
 #puts [lindex $schoolsIdsRemove end] ; # last ID
 #puts [llength $schoolsIdsRemove]
-puts $logFile "[clock format [clock seconds] -format "%y%m%d %H:%M:%S"] >> SCHOOLS IDS TO REMOVE: [llength $schoolsIdsRemove]"
+puts $logFile "[clock format [clock seconds] -format "%y%m%d %H:%M:%S"] >> SCHOOLS IDS WITH ALL-FIELDS MATCH: [llength $schoolsIdsRemove]"
+
 # REMOVE REMOVABLE SCHOOLS IDS
 foreach i $schoolsIdsRemove {
 # JAMES: ugly uglly ugly. The leading dot is really to match a brace that's present 'cause I over-listed these lists
@@ -361,6 +394,8 @@ set schoolsIds [lsort -dictionary -index {0 0} -unique $schoolsIds]
 #puts [lindex $schoolsIds end] ; # last ID
 #puts [llength $schoolsIds]
 puts $logFile "[clock format [clock seconds] -format "%y%m%d %H:%M:%S"] >> SCHOOLS IDS REMAINING: [llength $schoolsIds]"
+
+# LIBRARY MATCH/OVERLAY VS. ADD. Currently "ADD" means ADD or MATCH/OVERLAY :)
 set libraryAddIds {}
 foreach i $schoolsIds {
 	if {[lsearch -exact $libraryIds $i]==-1} {
