@@ -6,6 +6,7 @@
 // To be called from STUDENTS-ELEMENTARY.exp
 // PHP Script mostly cribbed from Mark Noble's work
 
+// 20160819: corrected EXP_DATE to 07-31-2017
 // 20160203: Eliminate patron note field "ATTENTION - PLEASE READ - P-type 33 accounts are to be used for Limitless Libraries school delivery only..."
 // 20151215: adjust for incoming record format like
 // Patron Barcodes	Patron Names	School Code	Insert vs. Overlay	Patron Notes	Patron Birth Date	Patron ZIP	Patron Guardian	Patron Address	Patron Phone	Patron Email
@@ -59,7 +60,7 @@ while (($rawData = fgetcsv($exportFhnd, 0, "\t")) !== FALSE) {
                 }
                 $patronData['030_BARCODE'][] = $patronID;
         }
-	$patronData['080_EXP_DATE'] = "07/31/2016";
+	$patronData['080_EXP_DATE'] = "07/31/2017";
 	$patronData['081_AGE_GRP'] = "j"; // assume j, even though it is possible that some Elementary School students are Young Adults
 	$patronData['082_REG_LIB'] = "3";
 	$patronData['083_ZIP'] = (isset($patronData['ZIP']) ? (substr($patronData['ZIP'],0,2) == "37" ? substr($patronData['ZIP'],2,3) : "000") : "000");
