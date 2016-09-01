@@ -7,7 +7,11 @@
 # Millennium 2014 2.0.0_15
 #
 # to do: 
-#	fix duplication of last INSERT record
+#	do not delete error file if error > 0
+#	send email if error > 0 ?
+#	log rotation
+#       either proc or if 0 each section of code so it can be run in pieces. There are some weird braces somewhere...
+#	fix duplication of last INSERT record (created 6 of the same patron 20160825)
 #	determine whether "overlisting" is an issue, e.g., schoolsIds takes the form {{000000 100 07-31-2016}} {{000001 100 07-31-2016}} etc 
 #	change schoolsIds and libraryIds and similar "ID" variable names to describe IDs, full records, tuples, whatever's appropriate
 #	overlay: patrons not in mnps data with "correct" EXP date should be given EXP DATE of today that should stick
@@ -18,6 +22,8 @@
 #			should instead be looking for the buffer to get some more stuff in it:
 #		expect "$reviewFile > $name*Select review file to work on :"
 #
+# 2016082? : Fixed load report regexp should not cause script to die 
+# 20160829 : changed load profile m2tab.p @busy = "n" in hopes of producting fewer 6xlast record
 # 20160810 : fixes "201417 should not overlay patron 2519201417..."
 # 20160729 : fix patron with multiple school records entering Millennium with invalid hold pickup branch
 # 20160719 : 
@@ -62,8 +68,8 @@
 # 	log into INNOPAC, load patron records, create new list of P TYPE 30 patrons
 #
 
-#exp_internal 1 ; # verbose debugging to stdout
-#log_user 0 ; # do NOT send screens to stdout
+exp_internal 0 ; # 1 = verbose debugging to stdout
+log_user 0 ; # 1 = send screens to stdout
 
 # determine whether "m" or "manual" was included as an argument
 if { [lindex $argv 0] eq "m" || [lindex $argv 0] eq "manual" } then  {
@@ -124,7 +130,7 @@ puts $logFile "[clock format [clock seconds] -format "%y%m%d %H:%M:%S"] >> Start
 # block for commenting out lots of lines
 # N.B.: we cannot place commented right-braces below in the code
 # they will be interpreted as the closing brace of this if 0 conditional
-if 0 {
+#if 0 {
 
 # SCHOOLS: RETRIEVE DATA
 # SCHOOLS deliver data to /home/limitless/data
@@ -136,11 +142,10 @@ if {$manual eq false} {
 	wait
 	close
 	file rename -force -- $localPath$schoolsFile $localPath$schoolsFileName
-	file delete -- [file dirname $localPath$schoolsFile]
+	file delete -force -- [file dirname $localPath$schoolsFile]
 }
 
 # insert right brace here for closing if 0 comment block
-}
 
 # CONNECT TO INNOPAC
 spawn ssh $INNOPACuser@$host
@@ -399,7 +404,7 @@ if {$manual eq false} {
 				[lsearch -regexp $libraryRecords $re]>-1
 			} then {
 				set patronOverlay "OVERLAY"
-				puts "found $id in libraryRecords [lindex $libraryRecords [lsearch -regexp $libraryRecords $re]]"
+				#puts "found $id in libraryRecords [lindex $libraryRecords [lsearch -regexp $libraryRecords $re]]"
 				regexp -- {(^[^\t]*)\t([^\t]*)\t[^\t]*\t[^\t]*\t([^\t]*)$} \
 				[lindex $libraryRecords [lsearch -regexp $libraryRecords $re]] \
 				patronFullRecordLibrary patronBarcodesLibrary patronNamesLibrary patronNotesLibrary
@@ -543,7 +548,8 @@ send " "
 #sleep 10
 
 # LOAD REPORT
-expect -re "Number of input records\\s+-\\s(\[0-9]+).+Number of errors\\s+-\\s(\[0-9]+).+PATRON.+?(\[0-9]+)\\s.+?\\s(\[0-9]+)\\s+(\[0-9]+)\\s+(\[0-9]+)*\n"
+#expect -re "Number of input records\\s+-\\s(\[0-9]+).+Number of errors\\s+-\\s(\[0-9]+).+PATRON.+?(\[0-9]+)\\s.+?\\s(\[0-9]+)\\s+(\[0-9]+)\\s+(\[0-9]+)*\n"
+expect -re "Number of input records\\s+-\\s(\[0-9]+).+Number of errors\\s+-\\s(\[0-9]+).+PATRON.+?(\[0-9]+)\\s.+?\\s(\[0-9]+)\\s+(\[0-9]+)\\s+(\[0-9]+)(.*?P > PRINT)"
 
 set loadReportInput $expect_out(1,string)
 set loadReportErrors $expect_out(2,string)
@@ -562,6 +568,9 @@ send " "
 # CLEAN UP
 # grab file number and name before the options menu renders
 expect -re "(\[0-9]+) > $libraryAddsFileName\.pat"
+
+#comment out file delete until I figure out 6 errors 20160829
+if 0{
 expect "+ > ADDITIONAL options"
 send "+"
 expect "R > REMOVE files"
@@ -589,6 +598,9 @@ expect "+ > ADDITIONAL options"
 send "+"
 expect "R > REMOVE files"
 # .errlog?
+
+# end if 0
+}
 
 sleep 1
 
