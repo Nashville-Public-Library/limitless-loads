@@ -6,6 +6,7 @@
 // To be called from STUDENTS-ELEMENTARY.exp
 // PHP Script mostly cribbed from Mark Noble's work
 
+// 20160831: corrected BIRTH_DATE format
 // 20160819: corrected EXP_DATE to 07-31-2017
 // 20160203: Eliminate patron note field "ATTENTION - PLEASE READ - P-type 33 accounts are to be used for Limitless Libraries school delivery only..."
 // 20151215: adjust for incoming record format like
@@ -67,7 +68,7 @@ while (($rawData = fgetcsv($exportFhnd, 0, "\t")) !== FALSE) {
 	$patronData['084_PTYPE'] = "033";
 	$patronData['085_HOLD_LIBR'] = "ps" . (isset($patronData['school']) ? $patronData['school'] : "");
 	$patronData['086_MBLOCK'] = "-";
-	$patronData['089_BIRTH_DATE'] = (isset($patronData['birth_date']) ? $patronData['birth_date'] : "  -  -  "); 
+	$patronData['089_BIRTH_DATE'] = (isset($patronData['birth_date']) ? date("m-d-y", strtotime($patronData['birth_date'])) : "  -  -  "); 
         $patronData['100_NAME'] = array();
         foreach ($patronData['patronNames'] as $patronName) {
                 $patronData['100_NAME'][] = $patronName;
