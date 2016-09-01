@@ -7,10 +7,19 @@
 #
 # to do:
 #	either proc or if 0 each section of code so it can be run in pieces. There are some weird braces somewhere...
+#	do not delete error file if error > 0
+#	send email if error > 0 ?
+#	log rotation
 #	add auto|manual arg
 #	add logic to page forward when looking for reviewFile
 #	add check to review file to ensure it is big enough
-#
+#       eliminate wrongheaded sleep statements, e.g.,
+#               expect "$reviewFile > $name"
+#               sleep 1
+#                       should instead be looking for the buffer to get some more stuff in it:
+#               expect "$reviewFile > $name*Select review file to work on :"
+#       
+# 2016082? : Fixed load report regexp should not cause script to die
 # 20160819 : changes to accommodate new Schools extract format 2016-2017
 #	EXCLUDE GRADES P3,P4,K,1,2
 #	EXCLUDE STUDENTS WITH NPL_PERMISSION = No
@@ -37,7 +46,7 @@
 # 	log into INNOPAC, load patron records, create new list of P TYPE 33 patrons
 
 exp_internal 0 ; # 1 = verbose debugging to stdout
-log_user 1 ; # 1 = send screens to stdout
+log_user 0 ; # 1 = send screens to stdout
 
 # determine whether "m" or "manual" was included as an argument
 if { [lindex $argv 0] eq "m" || [lindex $argv 0] eq "manual" } then  {
@@ -276,6 +285,7 @@ set reSchoolsID_NUMBER "^(?:\[^\t]*\t)\{$schoolsID_NUMBER\}(\[^\t]*)\t"
 set reSchoolsGRADE "^(?:\[^\t]*\t)\{$schoolsGRADE\}(\[^\t]*)\t"
 set reSchoolsPermission_NPL "^(?:\[^\t]*\t)\{$schoolsPermission_NPL\}(\[^\t]*)\t"
 
+#puts "[clock format [clock seconds] -format "%y%m%d %H:%M:%S"] >> START: Validating school records"
 foreach line $schoolsRecords {
 	# eliminate known trouble accounts
 	regexp -- $reSchoolsID_NUMBER $line -> schoolsID_NUMBERValue
@@ -324,6 +334,9 @@ set schoolsIds [lsort -dictionary -index 0 $schoolsIds]
 #puts [lindex $schoolsIds end] ; # last ID
 #puts [llength $schoolsIds]
 puts $logFile "[clock format [clock seconds] -format "%y%m%d %H:%M:%S"] >> SCHOOLS IDS: [llength $schoolsIds]"
+#puts "[clock format [clock seconds] -format "%y%m%d %H:%M:%S"] >> FINISH: Validating school records"
+
+#puts "[clock format [clock seconds] -format "%y%m%d %H:%M:%S"] >> START: Reading Library records"
 set libraryFile [open $localPath$libraryFileName]
 set data [read $libraryFile]
 close $libraryFile
@@ -369,7 +382,10 @@ puts $logFile "[clock format [clock seconds] -format "%y%m%d %H:%M:%S"] >> LIBRA
 #puts "\n\n\nLIBRARY REJECTS\n"
 #puts [lindex $libraryRejects end] ; # last ID
 #puts [llength $libraryRejects]
+#puts "[clock format [clock seconds] -format "%y%m%d %H:%M:%S"] >> FINISH: Reading Library records"
 
+
+#puts "[clock format [clock seconds] -format "%y%m%d %H:%M:%S"] >> START: sift to only changed/added records"
 set schoolsIdsRemove {}
 foreach i $libraryIds {
 	if {[lsearch -exact $schoolsIds $i]>-1} {
@@ -406,8 +422,15 @@ foreach i $schoolsIds {
 #puts [lindex $libraryAddIds end] ; # last ID
 #puts [llength $libraryAddIds]
 puts $logFile "[clock format [clock seconds] -format "%y%m%d %H:%M:%S"] >> LIBRARY ADD IDS: [llength $libraryAddIds]"
+#puts "[clock format [clock seconds] -format "%y%m%d %H:%M:%S"] >> FINISH: sift to only changed/added records"
+
 if {$manual eq false} {
+	set count 0
 	foreach id $libraryAddIds {
+		incr count
+		if {[::tcl::mathop::% $count 100] == 0} {
+			#puts "[clock format [clock seconds] -format "%y%m%d %H:%M:%S"] >> START: build record $count"
+		}
 		set record {}
 		set patronOverlay ""
 		set patronAddress {}
@@ -560,6 +583,9 @@ if {$manual eq false} {
 
 			lappend libraryAddRecords $thisRecord
 		}
+		if {[::tcl::mathop::% $count 100] == 0} {
+			#puts "[clock format [clock seconds] -format "%y%m%d %H:%M:%S"] >> FINISH: build record $count"
+		}
 	}
 }
 
@@ -576,11 +602,13 @@ close $libraryAddsFile
 # insert right brace here for closing if 0 comment block
 
 # php script composes MARC patron file
+#puts "[clock format [clock seconds] -format "%y%m%d %H:%M:%S"] >> START: transform records into pseudo-MARC"
 if {$manual eq false} {
 	exec php ./bin/STUDENTS-ELEMENTARY.php
 } else {
 	exec php ./bin/STUDENTS-ELEMENTARY.php manual
 }
+#puts "[clock format [clock seconds] -format "%y%m%d %H:%M:%S"] >> FINISH: transform records into pseudo-MARC"
 
 # insert right brace here for closing if 0 comment block
 
@@ -643,19 +671,24 @@ expect "C > CONVERT a MARC file"
 send "C"
 expect "Enter file number"
 send $expectMatch
+
 #to place in INNOPAC load-testing mode remove octothorpes from the next three lines
 #expect "T > Loading mode"
 #send "T"
 #expect "T > TESTING mode"
 #end testing mode code
+
 expect "L > LOAD records"
 send "L"
-sleep 10
+set timeout -1
 expect "Press <SPACE> to continue"
+set timeout $wait
 send " "
-sleep 10
+# sleep 10
+
 # LOAD REPORT
-expect -re "Number of input records\\s+-\\s(\[0-9]+).+Number of errors\\s+-\\s(\[0-9]+).+PATRON.+?(\[0-9]+)\\s.+?\\s(\[0-9]+)\\s+(\[0-9]+)\\s+(\[0-9]+)"
+#expect -re "Number of input records\\s+-\\s(\[0-9]+).+Number of errors\\s+-\\s(\[0-9]+).+PATRON.+?(\[0-9]+)\\s.+?\\s(\[0-9]+)\\s+(\[0-9]+)\\s+(\[0-9]+)"
+expect -re "Number of input records\\s+-\\s(\[0-9]+).+Number of errors\\s+-\\s(\[0-9]+).+PATRON.+?(\[0-9]+)\\s.+?\\s(\[0-9]+)\\s+(\[0-9]+)\\s+(\[0-9]+)(.*?P > PRINT)"
 set loadReportInput $expect_out(1,string)
 set loadReportErrors $expect_out(2,string)
 set loadReportCreated $expect_out(3,string)
@@ -664,10 +697,16 @@ set loadReportRejected $expect_out(5,string)
 set loadReportRead $expect_out(6,string)
 puts $logFile "[clock format [clock seconds] -format "%y%m%d %H:%M:%S"] >> LOAD REPORT: input:$loadReportInput errors:$loadReportErrors created:$loadReportCreated overlayed:$loadReportOverlayed rejected:$loadReportRejected read:$loadReportRead"
 unset expect_out
+
+# IF LOAD ERRORS OR REJECTS EXIST DO NOT REMOVE .error LOG
+
 expect "Q > QUIT"
 send "Q"
 expect "Press <SPACE> to continue"
 send " "
+
+# cut out cleanup while errors exist 20160824
+if 0 {
 # CLEAN UP
 # grab file number and name before the options menu renders
 expect -re "(\[0-9]+) > $libraryAddsFileName\.pat"
@@ -697,6 +736,8 @@ send "+"
 expect "R > REMOVE files"
 # .errlog?
 sleep 1
+}
+
 # GO TO MAINMENU
 expect "+ > ADDITIONAL options"
 send "+"
