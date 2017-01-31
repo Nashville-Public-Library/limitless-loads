@@ -6,6 +6,7 @@
 # Millennium 2014 2.0.0_15
 #
 # to do:
+#	write log immediately, no buffer
 #	either proc or if 0 each section of code so it can be run in pieces. There are some weird braces somewhere...
 #	do not delete error file if error > 0
 #	send email if error > 0 ?
@@ -18,7 +19,9 @@
 #               sleep 1
 #                       should instead be looking for the buffer to get some more stuff in it:
 #               expect "$reviewFile > $name*Select review file to work on :"
+#       delete or expire/mblock accounts that are no longer in MNPS data - with a max threshhold
 #       
+# 20170130 : add HOMEROOM to match/update criteria
 # 2016082? : Fixed load report regexp should not cause script to die
 # 20160819 : changes to accommodate new Schools extract format 2016-2017
 #	EXCLUDE GRADES P3,P4,K,1,2
@@ -283,6 +286,7 @@ set schoolsPermission_NPL [lsearch -exact $schoolsColumns "Permission_NPL"]
 set reSchoolsSCHOOL_CODE "^(?:\[^\t]*\t)\{$schoolsSCHOOL_CODE\}(\[^\t]*)\t"
 set reSchoolsID_NUMBER "^(?:\[^\t]*\t)\{$schoolsID_NUMBER\}(\[^\t]*)\t"
 set reSchoolsGRADE "^(?:\[^\t]*\t)\{$schoolsGRADE\}(\[^\t]*)\t"
+set reSchoolsHOMEROOM_NUMBER "^(?:\[^\t]*\t)\{$schoolsHOMEROOM_NUMBER\}(\[^\t]*)\t"
 set reSchoolsPermission_NPL "^(?:\[^\t]*\t)\{$schoolsPermission_NPL\}(\[^\t]*)\t"
 
 #puts "[clock format [clock seconds] -format "%y%m%d %H:%M:%S"] >> START: Validating school records"
@@ -322,7 +326,8 @@ foreach line $schoolsRecords {
 		#puts "skip $schoolsID_NUMBERValue invalid school $schoolsSCHOOL_CODEValue"
 		continue
 	} else {
-		set line "[string trim $schoolsID_NUMBERValue]\t[string trim $schoolsSCHOOL_CODEValue]\t$expDate"
+		regexp -- $reSchoolsHOMEROOM_NUMBER $line -> schoolsHOMEROOM_NUMBERValue
+		set line "[string trim $schoolsID_NUMBERValue]\t[string trim $schoolsSCHOOL_CODEValue]\t$expDate\t[string toupper [string trim $schoolsHOMEROOM_NUMBERValue]]"
 		lappend schoolsIds [list [split $line "\t"]]
 		#puts [list [split $line "\t"]]
 	}
@@ -355,24 +360,31 @@ set libraryEMAIL_ADDR [lsearch -exact $libraryColumns "EMAIL ADDR"]
 set reLibraryHOLD_LIBR "^(?:\[^\t]*\t)\{$libraryHOLD_LIBR\}(?:\[a-z]{2})(\[^\t]\{3})\t"
 set reLibraryCARD "^(?:\[^\t]*\t)\{$libraryCARD\}(?:\[^\t]+\\|)*(190\\d\{6})(?:\\|\[^\t]*)*\t"
 set reLibraryEXP_DATE "^(?:\[^\t]*\t)\{$libraryEXP_DATE\}(\[-0-9]\{10\})\t"
+set reLibraryNOTE_PATRON_HOMEROOM "^(?:\[^\t]*\t)\{$libraryNOTE_PATRON\}(?:\[^\t]*) (HOMEROOM \[^;]*);"
 
 foreach line $libraryRecords {
 	set libraryHOLD_LIBRValue ""
 	set libraryCARDValue ""
 	set libraryEXP_DATEValue ""
+	set libraryNOTE_PATRON_HOMEROOMValue ""
 	if [
 		regexp -- $reLibraryHOLD_LIBR [string trim $line] -> libraryHOLD_LIBRValue &&
 		regexp -- $reLibraryCARD [string trim $line] -> libraryCARDValue &&
-		regexp -- $reLibraryEXP_DATE [string trim $line] -> libraryEXP_DATEValue
+		regexp -- $reLibraryEXP_DATE [string trim $line] -> libraryEXP_DATEValue &&
+		regexp -- $reLibraryNOTE_PATRON_HOMEROOM [string trim $line] -> libraryNOTE_PATRON_HOMEROOMValue
 	] then {
-		set line "[string trim $libraryCARDValue]\t[string trim $libraryHOLD_LIBRValue]\t$libraryEXP_DATEValue"
+		# remove "HOMEROOM " from the beginning of the HOMEROOM string
+		regsub {HOMEROOM } $libraryNOTE_PATRON_HOMEROOMValue {} libraryNOTE_PATRON_HOMEROOMValue
+		set line "[string trim $libraryCARDValue]\t[string trim $libraryHOLD_LIBRValue]\t$libraryEXP_DATEValue\t[string toupper [string trim $libraryNOTE_PATRON_HOMEROOMValue]]"
 		lappend libraryIds [list [split $line "\t"]]
+		#puts [list [split $line "\t"]]
 	} else {
 		# libraryRejects should contain the HEADER line and empty line at the bottom of file
 		lappend libraryRejects $line
 		# puts $line
 	}
 }
+
 set libraryIds [lsort -dictionary -index {0 0} $libraryIds]
 #puts "\n\n\nLIBRARY IDS\n"
 #puts [lindex $libraryIds 2500] ; #
@@ -705,8 +717,6 @@ send "Q"
 expect "Press <SPACE> to continue"
 send " "
 
-# cut out cleanup while errors exist 20160824
-if 0 {
 # CLEAN UP
 # grab file number and name before the options menu renders
 expect -re "(\[0-9]+) > $libraryAddsFileName\.pat"
@@ -736,7 +746,6 @@ send "+"
 expect "R > REMOVE files"
 # .errlog?
 sleep 1
-}
 
 # GO TO MAINMENU
 expect "+ > ADDITIONAL options"
