@@ -21,6 +21,7 @@
 #		sleep 1
 #			should instead be looking for the buffer to get some more stuff in it:
 #		expect "$reviewFile > $name*Select review file to work on :"
+#	delete or expire/mblock accounts that are no longer in MNPS data - with a max threshhold
 #
 # 2016082? : Fixed load report regexp should not cause script to die 
 # 20160829 : changed load profile m2tab.p @busy = "n" in hopes of producting fewer 6xlast record
@@ -68,8 +69,8 @@
 # 	log into INNOPAC, load patron records, create new list of P TYPE 30 patrons
 #
 
-exp_internal 0 ; # 1 = verbose debugging to stdout
-log_user 0 ; # 1 = send screens to stdout
+exp_internal 1 ; # 1 = verbose debugging to stdout
+log_user 1 ; # 1 = send screens to stdout
 
 # determine whether "m" or "manual" was included as an argument
 if { [lindex $argv 0] eq "m" || [lindex $argv 0] eq "manual" } then  {
@@ -548,7 +549,6 @@ send " "
 #sleep 10
 
 # LOAD REPORT
-#expect -re "Number of input records\\s+-\\s(\[0-9]+).+Number of errors\\s+-\\s(\[0-9]+).+PATRON.+?(\[0-9]+)\\s.+?\\s(\[0-9]+)\\s+(\[0-9]+)\\s+(\[0-9]+)*\n"
 expect -re "Number of input records\\s+-\\s(\[0-9]+).+Number of errors\\s+-\\s(\[0-9]+).+PATRON.+?(\[0-9]+)\\s.+?\\s(\[0-9]+)\\s+(\[0-9]+)\\s+(\[0-9]+)(.*?P > PRINT)"
 
 set loadReportInput $expect_out(1,string)
@@ -565,12 +565,12 @@ send "Q"
 expect "Press <SPACE> to continue"
 send " "
 
+# comment out clean up while James figures out a problem 20160914 
+if 0 {
 # CLEAN UP
 # grab file number and name before the options menu renders
 expect -re "(\[0-9]+) > $libraryAddsFileName\.pat"
 
-#comment out file delete until I figure out 6 errors 20160829
-if 0{
 expect "+ > ADDITIONAL options"
 send "+"
 expect "R > REMOVE files"
@@ -598,8 +598,7 @@ expect "+ > ADDITIONAL options"
 send "+"
 expect "R > REMOVE files"
 # .errlog?
-
-# end if 0
+# close if 0
 }
 
 sleep 1
