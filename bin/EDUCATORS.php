@@ -6,6 +6,7 @@
 // To be called from EDUCATORS.exp
 // PHP Script mostly cribbed from Mark Noble's work
 
+// 2017020X: educator email
 // 20160729: adjustments for 2016-2017 shcool year
 //	+ EXP DATE 080 = 07-31-2017
 //	+ PIN 600 = 2016
@@ -47,7 +48,8 @@ while (($rawData = fgetcsv($exportFhnd, 0, "\t")) !== FALSE) {
 		'educatorNames' => $rawData[1] != 'NULL' ? preg_split("/\|/", $rawData[1]) : '',
 		'school' => trim($rawData[2] != 'NULL' ? $rawData[2] : ''),
 		'overlay' => $rawData[3] != 'NULL' ? $rawData[3] : 'INSERT',
-		'educatorNotes' => $rawData[4] != 'NULL' ? preg_split("/\|/", $rawData[4]) : ''
+		'educatorNotes' => $rawData[4] != 'NULL' ? preg_split("/\|/", $rawData[4]) : '',
+		'educatorEmail' => trim($rawData[5] != 'NULL' ? $rawData[5] : '')
 //		'birth_date' => trim($rawData[5] != 'NULL' ? $rawData[5] : '')
 	);
 	$patronData['030_BARCODE'] = array();
@@ -77,6 +79,7 @@ while (($rawData = fgetcsv($exportFhnd, 0, "\t")) !== FALSE) {
 	foreach ($patronData['educatorNotes'] as $educatorNote) {
 		$patronData['500_NOTE'][] = $educatorNote;
 	}
+	$patronData['550_EMAIL'] = strtoupper($patronData['educatorEmail']);
 	$patronData['600_PIN'] = "2016";
 
 	if (array_key_exists($patronData['030_BARCODE'][0], $allPatrons)){
@@ -134,6 +137,8 @@ foreach ($allPatrons as $patronData){
 	foreach ($patronData['500_NOTE'] as $patronNote) {
 		$record->appendField(new File_MARC_Data_Field('500',array( new File_MARC_Subfield('a', $patronNote))));
 	}
+        //550 = email
+        $record->appendField(new File_MARC_Data_Field('550',array( new File_MARC_Subfield('a', $patronData['550_EMAIL']))));
 	//600 = pin
 	$record->appendField(new File_MARC_Data_Field('600',array( new File_MARC_Subfield('a', $patronData['600_PIN']))));
 
