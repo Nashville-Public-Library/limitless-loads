@@ -6,6 +6,7 @@
 # Millennium 2014 2.0.0_15
 #
 # to do:
+#	delete duplicated addresses and phone numbers before loading into Millennium
 #	write log immediately, no buffer
 #	either proc or if 0 each section of code so it can be run in pieces. There are some weird braces somewhere...
 #	do not delete error file if error > 0
