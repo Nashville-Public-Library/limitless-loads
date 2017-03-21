@@ -7,6 +7,7 @@
 # Millennium 2014 2.0.0_15
 #
 # to do: 
+#	extract includes email as of 20170207
 #	do not delete error file if error > 0
 #	send email if error > 0 ?
 #	log rotation
@@ -69,7 +70,7 @@
 # 	log into INNOPAC, load patron records, create new list of P TYPE 30 patrons
 #
 
-exp_internal 1 ; # 1 = verbose debugging to stdout
+exp_internal 0 ; # 1 = verbose debugging to stdout
 log_user 1 ; # 1 = send screens to stdout
 
 # determine whether "m" or "manual" was included as an argument
@@ -217,6 +218,8 @@ send "01" ; # patron EXP DATE
 expect "Output Item #5 >"
 send "x" ; # patron NOTE
 expect "Output Item #6 >"
+send "z" ; # patron EMAIL
+expect "Output Item #7 >"
 send "\r"
 expect "1 > Field Delimiter"
 send "1"
@@ -279,6 +282,7 @@ set schoolsFIRST_NAME 1
 set schoolsLAST_NAME 2
 set schoolsMIDDLE_NAME 3
 set schoolsSCHOOL_CODE 8
+set schoolsEMAIL 9
 
 set reSchoolsSCHOOL_CODE "^(?:\[^\t]*\t)\{$schoolsSCHOOL_CODE}(\[^\t]*)\t"
 set reSchoolsID_NUMBER "^(?:\[^\t]*\t)\{$schoolsID_NUMBER}(\[^\t]*)\t"
@@ -381,6 +385,7 @@ if {$manual eq false} {
 		set patronBarcodes {}
 		set patronNames {}
 		set patronNotes {}
+		set patronEmails {}
 		set id [lindex $id 0 0]
 		#puts "looking for $id in schoolsRecordsValid"
 		if {
@@ -388,9 +393,9 @@ if {$manual eq false} {
 		} then {
 			set patronOverlay "INSERT"
 			#puts "found $id in schoolsRecordsValid"
-			regexp -- {(^[0-9]{6})\t([^\t]*)\t([^\t]*)\t([^\t]*)\t(?:[^\t]*\t[^\t]*\t[^\t]*\t[^\t]*)\t([0-9a-z]{3})\t.*$} \
+			regexp -- {(^[0-9]{6})\t([^\t]*)\t([^\t]*)\t([^\t]*)\t(?:[^\t]*\t[^\t]*\t[^\t]*\t[^\t]*)\t([0-9a-z]{3})\t([^\t]*)$} \
 			[lindex $schoolsRecordsValid [lsearch $schoolsRecordsValid $id*]] \
-			patronFullRecord patronBarcode patronNameFirst patronNameLast patronNameMiddle patronSchoolCode
+			patronFullRecord patronBarcode patronNameFirst patronNameLast patronNameMiddle patronSchoolCode patronEmail
 			lappend patronBarcodes $patronBarcode
 			set patronName "[string trim $patronNameLast], [string trim $patronNameFirst]"
 			if {
@@ -399,6 +404,11 @@ if {$manual eq false} {
 				append patronNameMiddle " " [string trim $patronNameMiddle]
 			}
 			lappend patronNames [string toupper $patronName]
+			if {
+				[string length $patronEmail]>0
+			} then {
+				lappend patronEmails [string toupper $patronEmail]
+			}
 			#puts "looking for $id in libraryRecords"
 			set re "(^|^\[^\t]+\\|)${id}(\\|\[^\t]*\t|\t)"
 			if {
@@ -406,9 +416,9 @@ if {$manual eq false} {
 			} then {
 				set patronOverlay "OVERLAY"
 				#puts "found $id in libraryRecords [lindex $libraryRecords [lsearch -regexp $libraryRecords $re]]"
-				regexp -- {(^[^\t]*)\t([^\t]*)\t[^\t]*\t[^\t]*\t([^\t]*)$} \
+				regexp -- {(^[^\t]*)\t([^\t]*)\t[^\t]*\t[^\t]*\t([^\t]*)\t([^\t]*)$} \
 				[lindex $libraryRecords [lsearch -regexp $libraryRecords $re]] \
-				patronFullRecordLibrary patronBarcodesLibrary patronNamesLibrary patronNotesLibrary
+				patronFullRecordLibrary patronBarcodesLibrary patronNamesLibrary patronNotesLibrary patronEmailsLibrary
 				lset patronBarcodesLibrary [split ${patronBarcodesLibrary} |]
 				foreach i $patronBarcodesLibrary {
 					lappend patronBarcodes [string toupper [string trim $i]]
@@ -425,12 +435,17 @@ if {$manual eq false} {
 						lappend patronNotes [string trim $i]
 					}
 				}
+                                lset patronEmailsLibrary [split ${patronEmailsLibrary} ",|"]
+                                foreach i $patronEmailsLibrary {
+                                        lappend patronEmails [string toupper [string trim $i]]
+                                }
 			}
-			lappend libraryAddRecords "[join [lsort -dictionary -unique $patronBarcodes] |]\t[join [lsort -unique $patronNames] |]\t$patronSchoolCode\t$patronOverlay\t[join [lsort -unique $patronNotes] |]"
+			lappend libraryAddRecords "[join [lsort -dictionary -unique $patronBarcodes] |]\t[join [lsort -unique $patronNames] |]\t$patronSchoolCode\t$patronOverlay\t[join [lsort -unique $patronNotes] |]\t[join [lsort -dictionary -unique $patronEmails] ","]"
 		}
 	}
 } else {
 	foreach id $libraryAddIds {
+# TO DO : configure manual add to include email address
 		set id [lindex $id {0 0}]
 #		puts "looking for $id in schoolsRecordsValid"
 		if {
@@ -445,6 +460,9 @@ if {$manual eq false} {
 		}
 	}
 }
+
+# hack to remove duplicates that accumulate at the end of the list
+set libraryAddRecords [lsort -unique $libraryAddRecords]
 
 #puts "LIBRARY ADD RECORDS"
 #puts $libraryAddRecords
@@ -566,7 +584,7 @@ expect "Press <SPACE> to continue"
 send " "
 
 # comment out clean up while James figures out a problem 20160914 
-if 0 {
+#if 0 {
 # CLEAN UP
 # grab file number and name before the options menu renders
 expect -re "(\[0-9]+) > $libraryAddsFileName\.pat"
@@ -599,7 +617,7 @@ send "+"
 expect "R > REMOVE files"
 # .errlog?
 # close if 0
-}
+
 
 sleep 1
 
